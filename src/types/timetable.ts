@@ -1,11 +1,14 @@
 export interface Faculty {
   id: string;
   name: string;
+  subjectId: string;
+  subjectCode: string;
 }
 
 export interface Subject {
   id: string;
   name: string;
+  code: string;
   isLab: boolean;
 }
 
