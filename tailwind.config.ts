@@ -47,6 +47,18 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        subject: {
+          DEFAULT: "hsl(var(--subject))",
+          foreground: "hsl(var(--subject-foreground))",
+        },
+        lab: {
+          DEFAULT: "hsl(var(--lab))",
+          foreground: "hsl(var(--lab-foreground))",
+        },
+        break: {
+          DEFAULT: "hsl(var(--break))",
+          foreground: "hsl(var(--break-foreground))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
