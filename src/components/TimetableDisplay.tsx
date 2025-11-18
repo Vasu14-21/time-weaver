@@ -1,0 +1,164 @@
+import { TimetableEntry, ConfigData } from "@/types/timetable";
+import { DAYS, TIME_SLOTS } from "@/utils/timetableGenerator";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Download, RotateCcw } from "lucide-react";
+
+interface TimetableDisplayProps {
+  config: ConfigData;
+  entries: TimetableEntry[];
+  onReset: () => void;
+}
+
+export function TimetableDisplay({ config, entries, onReset }: TimetableDisplayProps) {
+  const getEntry = (day: string, period: number) => {
+    return entries.find((e) => e.day === day && e.period === period);
+  };
+
+  const getSubjectName = (subjectId: string) => {
+    const subject = config.subjects.find((s) => s.id === subjectId);
+    if (subject) return subject.name;
+    const lab = config.labs.find((l) => l.id === subjectId);
+    return lab?.name || "";
+  };
+
+  const getFacultyName = (facultyId: string) => {
+    const faculty = config.faculty.find((f) => f.id === facultyId);
+    return faculty?.name || "";
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const timeSlots = TIME_SLOTS.filter((slot) => !slot.isBreak);
+  const displaySlots = [
+    { period: 1, label: "I", time: "9:00-10:00" },
+    { period: 2, label: "II", time: "10:00-10:55" },
+    { period: 3, label: "Break", time: "10:55-11:10", isBreak: true },
+    { period: 4, label: "III", time: "11:10-12:05" },
+    { period: 5, label: "IV", time: "12:05-1:00" },
+    { period: 6, label: "Lunch Break", time: "1:00-1:45", isBreak: true },
+    { period: 7, label: "V", time: "1:45-2:40" },
+    { period: 8, label: "VI", time: "2:40-3:35" },
+    { period: 9, label: "VII", time: "3:35-4:30" },
+  ];
+
+  return (
+    <div className="max-w-[95vw] mx-auto p-4 space-y-4">
+      <Card>
+        <CardHeader className="print:border-b">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-2xl">Class Timetable</CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                Branch: <span className="font-semibold">{config.branch}</span>
+              </p>
+            </div>
+            <div className="flex gap-2 print:hidden">
+              <Button onClick={handlePrint} variant="outline" size="sm">
+                <Download className="h-4 w-4 mr-2" />
+                Export
+              </Button>
+              <Button onClick={onReset} variant="outline" size="sm">
+                <RotateCcw className="h-4 w-4 mr-2" />
+                New Timetable
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-4">
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse border border-border">
+              <thead>
+                <tr className="bg-muted">
+                  <th className="border border-border p-2 text-sm font-semibold min-w-[80px]">
+                    Day
+                  </th>
+                  {displaySlots.map((slot, idx) => (
+                    <th
+                      key={idx}
+                      className={`border border-border p-2 text-sm font-semibold min-w-[120px] ${
+                        slot.isBreak ? "bg-break text-break-foreground" : ""
+                      }`}
+                    >
+                      <div>{slot.label}</div>
+                      <div className="text-xs font-normal mt-1">{slot.time}</div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {DAYS.map((day) => (
+                  <tr key={day}>
+                    <td className="border border-border p-2 font-semibold bg-muted text-center">
+                      {day}
+                    </td>
+                    {displaySlots.map((slot, idx) => {
+                      if (slot.isBreak) {
+                        return (
+                          <td
+                            key={idx}
+                            className="border border-border p-2 text-center bg-break text-break-foreground"
+                          >
+                            <div className="text-sm font-medium">Break</div>
+                          </td>
+                        );
+                      }
+
+                      const entry = getEntry(day, slot.period);
+                      if (!entry) {
+                        return (
+                          <td
+                            key={idx}
+                            className="border border-border p-2 text-center"
+                          >
+                            <div className="text-xs text-muted-foreground">-</div>
+                          </td>
+                        );
+                      }
+
+                      const isLab = entry.isLab;
+                      const bgClass = isLab
+                        ? "bg-lab text-lab-foreground"
+                        : "bg-subject text-subject-foreground";
+
+                      return (
+                        <td
+                          key={idx}
+                          className={`border border-border p-2 ${bgClass}`}
+                        >
+                          <div className="text-sm font-semibold">
+                            {getSubjectName(entry.subjectId)}
+                          </div>
+                          <div className="text-xs mt-1 opacity-90">
+                            {getFacultyName(entry.facultyId)}
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-6 flex gap-4 items-center justify-center text-sm">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-subject rounded"></div>
+              <span>Subject</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-lab rounded"></div>
+              <span>Lab (3 periods)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-break border border-border rounded"></div>
+              <span>Break</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
