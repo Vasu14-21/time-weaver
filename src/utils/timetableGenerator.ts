@@ -39,10 +39,29 @@ export function generateTimetable(
   const shuffledSubjects = [...subjects].sort(() => Math.random() - 0.5);
   const shuffledLabs = [...labs].sort(() => Math.random() - 0.5);
 
+  // Map each subject/lab to the faculty member(s) explicitly assigned to it
+  const subjectFacultyMap: Record<string, Faculty[]> = {};
+
+  faculty.forEach((member) => {
+    if (!member.subjectId) return;
+    if (!subjectFacultyMap[member.subjectId]) {
+      subjectFacultyMap[member.subjectId] = [];
+    }
+    subjectFacultyMap[member.subjectId].push(member);
+  });
+
+  const shuffledSubjectsWithFaculty = shuffledSubjects.filter(
+    (subject) => subjectFacultyMap[subject.id] && subjectFacultyMap[subject.id].length > 0
+  );
+
+  const shuffledLabsWithFaculty = shuffledLabs.filter(
+    (lab) => subjectFacultyMap[lab.id] && subjectFacultyMap[lab.id].length > 0
+  );
+
   // First, allocate labs (they need 3 consecutive periods)
   const availableLabDays = [...DAYS];
   
-  for (const lab of shuffledLabs) {
+  for (const lab of shuffledLabsWithFaculty) {
     if (availableLabDays.length === 0) break;
 
     // Randomly choose morning or afternoon slot
@@ -54,36 +73,50 @@ export function generateTimetable(
     const day = availableLabDays[dayIndex];
     availableLabDays.splice(dayIndex, 1); // Remove to ensure different days for labs
 
-    // Assign a random faculty member
-    const assignedFaculty = faculty[Math.floor(Math.random() * faculty.length)];
+    const possibleFaculty = subjectFacultyMap[lab.id] || [];
+    if (possibleFaculty.length === 0) continue;
 
-    // Check if faculty is available
-    const isAvailable = !facultyAllocations.some(
-      (allocation) =>
-        allocation.facultyId === assignedFaculty.id &&
-        allocation.day === day &&
-        allocation.periods.some((p) => periods.includes(p))
-    );
+    let assignedFaculty: Faculty | null = null;
+    let attempts = 0;
 
-    if (isAvailable) {
-      // Add lab entries for all 3 periods
-      periods.forEach((period) => {
-        entries.push({
-          day,
-          period,
-          subjectId: lab.id,
-          facultyId: assignedFaculty.id,
-          isLab: true,
-        });
-      });
+    while (attempts < possibleFaculty.length * 2) {
+      const candidateFaculty =
+        possibleFaculty[Math.floor(Math.random() * possibleFaculty.length)];
 
-      // Mark faculty as allocated
-      facultyAllocations.push({
-        facultyId: assignedFaculty.id,
-        day,
-        periods,
-      });
+      const isFacultyBusy = facultyAllocations.some(
+        (allocation) =>
+          allocation.facultyId === candidateFaculty.id &&
+          allocation.day === day &&
+          allocation.periods.some((p) => periods.includes(p))
+      );
+
+      if (!isFacultyBusy) {
+        assignedFaculty = candidateFaculty;
+        break;
+      }
+
+      attempts++;
     }
+
+    if (!assignedFaculty) continue;
+
+    // Add lab entries for all 3 periods
+    periods.forEach((period) => {
+      entries.push({
+        day,
+        period,
+        subjectId: lab.id,
+        facultyId: assignedFaculty!.id,
+        isLab: true,
+      });
+    });
+
+    // Mark faculty as allocated
+    facultyAllocations.push({
+      facultyId: assignedFaculty.id,
+      day,
+      periods,
+    });
   }
 
   // Now allocate regular subjects to remaining slots
@@ -97,42 +130,60 @@ export function generateTimetable(
       );
       if (isAllocated) continue;
 
-      // Pick a random subject
-      const subject =
-        shuffledSubjects[Math.floor(Math.random() * shuffledSubjects.length)];
-
-      // Pick a random faculty and check availability
+      // Try to find a subject and its assigned faculty for this slot
       let attempts = 0;
       let assignedFaculty: Faculty | null = null;
+      let selectedSubject: Subject | null = null;
 
-      while (attempts < faculty.length * 2) {
-        const candidateFaculty =
-          faculty[Math.floor(Math.random() * faculty.length)];
+      while (
+        attempts < shuffledSubjectsWithFaculty.length * 4 &&
+        !assignedFaculty
+      ) {
+        const subject =
+          shuffledSubjectsWithFaculty[
+            Math.floor(Math.random() * shuffledSubjectsWithFaculty.length)
+          ];
 
-        // Check if this faculty is already teaching at this time
-        const isFacultyBusy = facultyAllocations.some(
-          (allocation) =>
-            allocation.facultyId === candidateFaculty.id &&
-            allocation.day === day &&
-            allocation.periods.includes(period)
-        );
-
-        if (!isFacultyBusy) {
-          assignedFaculty = candidateFaculty;
-          break;
+        const possibleFaculty = subjectFacultyMap[subject.id] || [];
+        if (!possibleFaculty.length) {
+          attempts++;
+          continue;
         }
+
+        let facultyAttempts = 0;
+        while (facultyAttempts < possibleFaculty.length * 2) {
+          const candidateFaculty =
+            possibleFaculty[Math.floor(Math.random() * possibleFaculty.length)];
+
+          // Check if this faculty is already teaching at this time
+          const isFacultyBusy = facultyAllocations.some(
+            (allocation) =>
+              allocation.facultyId === candidateFaculty.id &&
+              allocation.day === day &&
+              allocation.periods.includes(period)
+          );
+
+          if (!isFacultyBusy) {
+            assignedFaculty = candidateFaculty;
+            selectedSubject = subject;
+            break;
+          }
+
+          facultyAttempts++;
+        }
+
         attempts++;
       }
 
-      // If we couldn't find an available faculty, use any faculty (fallback)
-      if (!assignedFaculty) {
-        assignedFaculty = faculty[Math.floor(Math.random() * faculty.length)];
+      // If we couldn't find a valid subject/faculty pair, leave this slot empty
+      if (!assignedFaculty || !selectedSubject) {
+        continue;
       }
 
       entries.push({
         day,
         period,
-        subjectId: subject.id,
+        subjectId: selectedSubject.id,
         facultyId: assignedFaculty.id,
         isLab: false,
       });
@@ -148,7 +199,6 @@ export function generateTimetable(
 
   return entries;
 }
-
 export function validateFacultyConflict(
   entries: TimetableEntry[],
   newEntry: TimetableEntry
