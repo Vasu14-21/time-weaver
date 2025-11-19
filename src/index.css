@@ -107,11 +107,39 @@ All colors MUST be HSL.
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
+* {
+  border-color: hsl(var(--border));
+}
 
-  body {
-    @apply bg-background text-foreground;
+body {
+  color: hsl(var(--foreground));
+  background: hsl(var(--background));
+}
+
+@media print {
+  @page {
+    size: landscape;
+    margin: 0.5cm;
   }
+  
+  body {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  
+  table {
+    width: 100%;
+    font-size: 10pt;
+    page-break-inside: avoid;
+  }
+  
+  th, td {
+    padding: 6px !important;
+    font-size: 9pt;
+  }
+  
+  .print\\:hidden {
+    display: none !important;
+  }
+}
 }

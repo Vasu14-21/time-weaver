@@ -10,6 +10,7 @@ export interface Subject {
   name: string;
   code: string;
   isLab: boolean;
+  facultyName?: string;
 }
 
 export interface TimeSlot {

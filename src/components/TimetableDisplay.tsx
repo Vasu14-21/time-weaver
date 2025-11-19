@@ -31,6 +31,42 @@ export function TimetableDisplay({ config, entries, onReset }: TimetableDisplayP
     window.print();
   };
 
+  const handleExportWord = () => {
+    const tableHtml = document.querySelector('table')?.outerHTML || '';
+    const html = `
+      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word'>
+        <head>
+          <meta charset='utf-8'>
+          <title>Timetable - ${config.branch}</title>
+          <style>
+            body { font-family: Calibri, Arial, sans-serif; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { border: 1px solid #000; padding: 8px; text-align: center; }
+            th { background-color: #f0f0f0; font-weight: bold; }
+            .break-cell { background-color: #fef3c7; }
+            .lab-cell { background-color: #dbeafe; }
+            .subject-cell { background-color: #f0fdf4; }
+          </style>
+        </head>
+        <body>
+          <h1>Class Timetable - ${config.branch}</h1>
+          ${tableHtml}
+        </body>
+      </html>
+    `;
+    
+    const blob = new Blob(['\ufeff', html], {
+      type: 'application/msword'
+    });
+    
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Timetable-${config.branch}.doc`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const timeSlots = TIME_SLOTS.filter((slot) => !slot.isBreak);
   const displaySlots = [
     { period: 1, label: "I", time: "9:00-10:00" },
@@ -56,9 +92,13 @@ export function TimetableDisplay({ config, entries, onReset }: TimetableDisplayP
               </p>
             </div>
             <div className="flex gap-2 print:hidden">
+              <Button onClick={handleExportWord} variant="outline" size="sm">
+                <Download className="h-4 w-4 mr-2" />
+                Export Word
+              </Button>
               <Button onClick={handlePrint} variant="outline" size="sm">
                 <Download className="h-4 w-4 mr-2" />
-                Export
+                Export PDF
               </Button>
               <Button onClick={onReset} variant="outline" size="sm">
                 <RotateCcw className="h-4 w-4 mr-2" />
