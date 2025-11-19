@@ -73,25 +73,24 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
     }
 
     // Build faculty list from subjects and labs
-    const facultyMap = new Map<string, Faculty>();
+    // Each faculty-subject/lab combination gets a separate entry
+    const facultyList: Faculty[] = [];
     const allItems = [...subjects, ...labs];
     
     allItems.forEach((item) => {
       const facultyName = item.facultyName!;
-      if (!facultyMap.has(facultyName)) {
-        facultyMap.set(facultyName, {
-          id: `faculty-${facultyMap.size + 1}`,
-          name: facultyName,
-          subjectId: item.id,
-          subjectCode: item.code,
-        });
-      }
+      facultyList.push({
+        id: `faculty-${facultyList.length + 1}`,
+        name: facultyName,
+        subjectId: item.id,
+        subjectCode: item.code,
+      });
     });
 
     const config: ConfigData = {
       branch: section ? `${branch}-${section}` : branch,
       section,
-      faculty: Array.from(facultyMap.values()),
+      faculty: facultyList,
       subjects,
       labs,
     };
