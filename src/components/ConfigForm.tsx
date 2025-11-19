@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -110,6 +110,24 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
     setLabs(updated);
   };
 
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>, action?: () => void) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (action) {
+        action();
+      } else {
+        const form = e.currentTarget.form;
+        if (form) {
+          const inputs = Array.from(form.querySelectorAll('input:not([disabled])')) as HTMLInputElement[];
+          const index = inputs.indexOf(e.currentTarget);
+          if (index < inputs.length - 1) {
+            inputs[index + 1].focus();
+          }
+        }
+      }
+    }
+  };
+
   return (
     <div className="max-w-2xl mx-auto p-6">
       <Card>
@@ -123,7 +141,7 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
         </CardHeader>
         <CardContent className="space-y-6">
           {step === 1 && (
-            <div className="space-y-4">
+            <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
               <div className="space-y-2">
                 <Label htmlFor="branch">Branch *</Label>
                 <Input
@@ -131,6 +149,7 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
                   placeholder="e.g., CSE"
                   value={branch}
                   onChange={(e) => setBranch(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => handleKeyDown(e)}
                 />
               </div>
               <div className="space-y-2">
@@ -140,16 +159,17 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
                   placeholder="e.g., A"
                   value={section}
                   onChange={(e) => setSection(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => handleKeyDown(e, handleStep1Next)}
                 />
               </div>
               <Button onClick={handleStep1Next} className="w-full">
                 Next
               </Button>
-            </div>
+            </form>
           )}
 
           {step === 2 && (
-            <div className="space-y-4">
+            <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
               <div className="space-y-2">
                 <Label htmlFor="subjectCount">Number of Subjects *</Label>
                 <Input
@@ -159,6 +179,7 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
                   placeholder="e.g., 5"
                   value={subjectCount}
                   onChange={(e) => setSubjectCount(e.target.value)}
+                  onKeyDown={(e) => handleKeyDown(e)}
                 />
               </div>
               <div className="space-y-2">
@@ -170,6 +191,7 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
                   placeholder="e.g., 2"
                   value={labCount}
                   onChange={(e) => setLabCount(e.target.value)}
+                  onKeyDown={(e) => handleKeyDown(e, handleStep2Next)}
                 />
               </div>
               <div className="flex gap-2">
@@ -180,11 +202,11 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
                   Next
                 </Button>
               </div>
-            </div>
+            </form>
           )}
 
           {step === 3 && (
-            <div className="space-y-4">
+            <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
               {subjects.length > 0 && (
                 <div className="space-y-3">
                   <h3 className="font-semibold">Subjects</h3>
@@ -199,6 +221,7 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
                           placeholder="e.g., IoT"
                           value={subject.name}
                           onChange={(e) => updateSubject(index, 'name', e.target.value)}
+                          onKeyDown={(e) => handleKeyDown(e)}
                         />
                       </div>
                       <div className="space-y-2">
@@ -210,6 +233,7 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
                           placeholder="e.g., CS401"
                           value={subject.code}
                           onChange={(e) => updateSubject(index, 'code', e.target.value)}
+                          onKeyDown={(e) => handleKeyDown(e)}
                         />
                       </div>
                       <div className="space-y-2">
@@ -221,6 +245,7 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
                           placeholder="e.g., Raj"
                           value={subject.facultyName || ""}
                           onChange={(e) => updateSubject(index, 'facultyName', e.target.value)}
+                          onKeyDown={(e) => handleKeyDown(e)}
                         />
                       </div>
                     </div>
@@ -231,43 +256,49 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
               {labs.length > 0 && (
                 <div className="space-y-3">
                   <h3 className="font-semibold">Labs</h3>
-                  {labs.map((lab, index) => (
-                    <div key={lab.id} className="grid grid-cols-3 gap-2">
-                      <div className="space-y-2">
-                        <Label htmlFor={`lab-${index}`}>
-                          Lab {index + 1} Name *
-                        </Label>
-                        <Input
-                          id={`lab-${index}`}
-                          placeholder="e.g., IoT Lab"
-                          value={lab.name}
-                          onChange={(e) => updateLab(index, 'name', e.target.value)}
-                        />
+                  {labs.map((lab, index) => {
+                    const isLastField = index === labs.length - 1;
+                    return (
+                      <div key={lab.id} className="grid grid-cols-3 gap-2">
+                        <div className="space-y-2">
+                          <Label htmlFor={`lab-${index}`}>
+                            Lab {index + 1} Name *
+                          </Label>
+                          <Input
+                            id={`lab-${index}`}
+                            placeholder="e.g., IoT Lab"
+                            value={lab.name}
+                            onChange={(e) => updateLab(index, 'name', e.target.value)}
+                            onKeyDown={(e) => handleKeyDown(e)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor={`lab-code-${index}`}>
+                            Lab Code *
+                          </Label>
+                          <Input
+                            id={`lab-code-${index}`}
+                            placeholder="e.g., CS401L"
+                            value={lab.code}
+                            onChange={(e) => updateLab(index, 'code', e.target.value)}
+                            onKeyDown={(e) => handleKeyDown(e)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor={`lab-faculty-${index}`}>
+                            Faculty Name *
+                          </Label>
+                          <Input
+                            id={`lab-faculty-${index}`}
+                            placeholder="e.g., Raj"
+                            value={lab.facultyName || ""}
+                            onChange={(e) => updateLab(index, 'facultyName', e.target.value)}
+                            onKeyDown={(e) => handleKeyDown(e, isLastField ? handleStep3Next : undefined)}
+                          />
+                        </div>
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor={`lab-code-${index}`}>
-                          Lab Code *
-                        </Label>
-                        <Input
-                          id={`lab-code-${index}`}
-                          placeholder="e.g., CS401L"
-                          value={lab.code}
-                          onChange={(e) => updateLab(index, 'code', e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor={`lab-faculty-${index}`}>
-                          Faculty Name *
-                        </Label>
-                        <Input
-                          id={`lab-faculty-${index}`}
-                          placeholder="e.g., Raj"
-                          value={lab.facultyName || ""}
-                          onChange={(e) => updateLab(index, 'facultyName', e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 
@@ -279,7 +310,7 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
                   Generate Timetable
                 </Button>
               </div>
-            </div>
+            </form>
           )}
         </CardContent>
       </Card>
