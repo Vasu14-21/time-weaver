@@ -229,6 +229,49 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
                 </div>
               )}
 
+              {labs.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="font-semibold">Labs</h3>
+                  {labs.map((lab, index) => (
+                    <div key={lab.id} className="grid grid-cols-3 gap-2">
+                      <div className="space-y-2">
+                        <Label htmlFor={`lab-${index}`}>
+                          Lab {index + 1} Name *
+                        </Label>
+                        <Input
+                          id={`lab-${index}`}
+                          placeholder="e.g., IoT Lab"
+                          value={lab.name}
+                          onChange={(e) => updateLab(index, 'name', e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor={`lab-code-${index}`}>
+                          Lab Code *
+                        </Label>
+                        <Input
+                          id={`lab-code-${index}`}
+                          placeholder="e.g., CS401L"
+                          value={lab.code}
+                          onChange={(e) => updateLab(index, 'code', e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor={`lab-faculty-${index}`}>
+                          Faculty Name *
+                        </Label>
+                        <Input
+                          id={`lab-faculty-${index}`}
+                          placeholder="e.g., Raj"
+                          value={lab.facultyName || ""}
+                          onChange={(e) => updateLab(index, 'facultyName', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setStep(2)} className="flex-1">
                   Back
