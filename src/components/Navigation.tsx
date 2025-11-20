@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Calendar, Layout } from "lucide-react";
+import { Calendar, Layout, Users } from "lucide-react";
 
 export function Navigation() {
   return (
@@ -13,6 +13,12 @@ export function Navigation() {
             <span className="text-xl font-bold text-foreground">Timetable Generator</span>
           </Link>
           <div className="flex items-center gap-2">
+            <Link to="/faculty">
+              <Button variant="outline" className="gap-2">
+                <Users className="h-4 w-4" />
+                Faculty-Subject
+              </Button>
+            </Link>
             <Link to="/admin">
               <Button variant="outline" className="gap-2">
                 <Layout className="h-4 w-4" />

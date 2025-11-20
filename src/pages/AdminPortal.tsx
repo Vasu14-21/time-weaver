@@ -73,6 +73,45 @@ const AdminPortal = () => {
     );
   };
 
+  const handleUpdateTimetableEntry = (timetableId: string, updatedEntry: any, oldEntry?: any) => {
+    const updated = timetables.map((tt) => {
+      if (tt.id === timetableId) {
+        let newEntries = [...tt.entries];
+        
+        if (oldEntry) {
+          newEntries = newEntries.filter(
+            (e) => !(e.day === oldEntry.day && e.period === oldEntry.period)
+          );
+        }
+        
+        if (updatedEntry) {
+          const existingIndex = newEntries.findIndex(
+            (e) => e.day === updatedEntry.day && e.period === updatedEntry.period
+          );
+          if (existingIndex >= 0) {
+            newEntries[existingIndex] = updatedEntry;
+          } else {
+            newEntries.push(updatedEntry);
+          }
+        }
+
+        return { ...tt, entries: newEntries };
+      }
+      return tt;
+    });
+
+    setTimetables(updated);
+    localStorage.setItem("allTimetables", JSON.stringify(updated));
+    checkAllConflicts(updated);
+    toast.success("Timetable updated");
+    
+    // Update selected timetable
+    const updatedSelected = updated.find(tt => tt.id === timetableId);
+    if (updatedSelected) {
+      setSelectedTimetable(updatedSelected);
+    }
+  };
+
   if (selectedTimetable) {
     return (
       <div className="min-h-screen bg-background">
@@ -90,6 +129,10 @@ const AdminPortal = () => {
             entries={selectedTimetable.entries}
             onReset={() => {}}
             hideResetButton
+            enableEdit={true}
+            onUpdateEntry={(updatedEntry, oldEntry) =>
+              handleUpdateTimetableEntry(selectedTimetable.id, updatedEntry, oldEntry)
+            }
           />
         </div>
       </div>
