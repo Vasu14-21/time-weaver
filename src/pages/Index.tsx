@@ -1,13 +1,18 @@
 import { useState, useEffect } from "react";
 import { ConfigForm } from "@/components/ConfigForm";
 import { TimetableDisplay } from "@/components/TimetableDisplay";
-import { ConfigData, Timetable } from "@/types/timetable";
+import { Navigation } from "@/components/Navigation";
+import { ConfigData, Timetable, SavedTimetable } from "@/types/timetable";
 import { generateTimetable } from "@/utils/timetableGenerator";
+import { detectFacultyConflicts } from "@/utils/conflictDetection";
 import { toast } from "sonner";
 import { Calendar } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertTriangle } from "lucide-react";
 
 const Index = () => {
   const [timetable, setTimetable] = useState<Timetable | null>(null);
+  const [conflicts, setConflicts] = useState<any[]>([]);
 
   useEffect(() => {
     // Load from localStorage
@@ -26,38 +31,105 @@ const Index = () => {
       const allSubjects = [...config.subjects, ...config.labs];
       const entries = generateTimetable(allSubjects, config.labs, config.faculty);
 
-      const newTimetable: Timetable = {
+      const newTimetable: SavedTimetable = {
+        id: `tt-${Date.now()}`,
         config,
         entries,
+        createdAt: new Date().toISOString(),
       };
+
+      // Check for conflicts with existing timetables
+      const allTimetables = loadAllTimetables();
+      const detectedConflicts = detectFacultyConflicts(newTimetable, allTimetables);
+
+      if (detectedConflicts.length > 0) {
+        setConflicts(detectedConflicts);
+        toast.warning(`Timetable generated with ${detectedConflicts.length} faculty conflict(s)`);
+      } else {
+        toast.success("Timetable generated successfully with no conflicts!");
+      }
 
       setTimetable(newTimetable);
       localStorage.setItem("timetable", JSON.stringify(newTimetable));
-      toast.success("Timetable generated successfully!");
     } catch (error) {
       console.error("Error generating timetable:", error);
       toast.error("Failed to generate timetable");
     }
   };
 
+  const loadAllTimetables = (): SavedTimetable[] => {
+    const saved = localStorage.getItem("allTimetables");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (error) {
+        console.error("Error loading all timetables:", error);
+      }
+    }
+    return [];
+  };
+
+  const handleSave = () => {
+    if (!timetable) return;
+
+    const allTimetables = loadAllTimetables();
+    const savedTimetable = timetable as SavedTimetable;
+    
+    // Check if already exists, update it; otherwise add new
+    const existingIndex = allTimetables.findIndex((tt) => tt.id === savedTimetable.id);
+    if (existingIndex >= 0) {
+      allTimetables[existingIndex] = savedTimetable;
+    } else {
+      allTimetables.push(savedTimetable);
+    }
+
+    localStorage.setItem("allTimetables", JSON.stringify(allTimetables));
+    toast.success("Timetable saved to Admin Portal!");
+  };
+
   const handleReset = () => {
     setTimetable(null);
+    setConflicts([]);
     localStorage.removeItem("timetable");
     toast.success("Timetable cleared");
   };
 
   if (timetable) {
     return (
-      <TimetableDisplay
-        config={timetable.config}
-        entries={timetable.entries}
-        onReset={handleReset}
-      />
+      <div className="min-h-screen bg-background">
+        <Navigation />
+        <div className="container mx-auto py-8">
+          {conflicts.length > 0 && (
+            <Alert variant="destructive" className="mb-6">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Faculty Conflicts Detected</AlertTitle>
+              <AlertDescription>
+                <div className="space-y-2 mt-2">
+                  {conflicts.map((conflict, idx) => (
+                    <div key={idx} className="text-sm">
+                      <strong>{conflict.facultyName}</strong> is scheduled for multiple
+                      classes on <strong>{conflict.day}</strong> at{" "}
+                      <strong>{conflict.timeSlot}</strong>
+                    </div>
+                  ))}
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+          <TimetableDisplay
+            config={timetable.config}
+            entries={timetable.entries}
+            onReset={handleReset}
+            onSave={handleSave}
+          />
+        </div>
+      </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-background">
+      <Navigation />
       <div className="container mx-auto py-8">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-3">

@@ -13,6 +13,7 @@ interface ConfigFormProps {
 
 export function ConfigForm({ onComplete }: ConfigFormProps) {
   const [step, setStep] = useState(1);
+  const [year, setYear] = useState("");
   const [branch, setBranch] = useState("");
   const [section, setSection] = useState("");
   const [subjectCount, setSubjectCount] = useState("");
@@ -21,6 +22,10 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
   const [labs, setLabs] = useState<Subject[]>([]);
 
   const handleStep1Next = () => {
+    if (!year.trim()) {
+      toast.error("Please select year");
+      return;
+    }
     if (!branch.trim()) {
       toast.error("Please enter branch name");
       return;
@@ -88,6 +93,7 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
     });
 
     const config: ConfigData = {
+      year,
       branch: section ? `${branch}-${section}` : branch,
       section,
       faculty: facultyList,
@@ -134,7 +140,7 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
         <CardHeader>
           <CardTitle>Configure Timetable - Step {step} of 3</CardTitle>
           <CardDescription>
-            {step === 1 && "Enter branch and section information"}
+            {step === 1 && "Enter year, branch and section information"}
             {step === 2 && "Specify number of subjects and labs"}
             {step === 3 && "Enter subject, lab, and faculty details"}
           </CardDescription>
@@ -142,6 +148,21 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
         <CardContent className="space-y-6">
           {step === 1 && (
             <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+              <div className="space-y-2">
+                <Label htmlFor="year">Year *</Label>
+                <select
+                  id="year"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                  value={year}
+                  onChange={(e) => setYear(e.target.value)}
+                >
+                  <option value="">Select Year</option>
+                  <option value="1st Year">1st Year</option>
+                  <option value="2nd Year">2nd Year</option>
+                  <option value="3rd Year">3rd Year</option>
+                  <option value="4th Year">4th Year</option>
+                </select>
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="branch">Branch *</Label>
                 <Input

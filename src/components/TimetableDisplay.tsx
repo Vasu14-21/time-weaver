@@ -8,9 +8,11 @@ interface TimetableDisplayProps {
   config: ConfigData;
   entries: TimetableEntry[];
   onReset: () => void;
+  onSave?: () => void;
+  hideResetButton?: boolean;
 }
 
-export function TimetableDisplay({ config, entries, onReset }: TimetableDisplayProps) {
+export function TimetableDisplay({ config, entries, onReset, onSave, hideResetButton }: TimetableDisplayProps) {
   const getEntry = (day: string, period: number) => {
     return entries.find((e) => e.day === day && e.period === period);
   };
@@ -100,10 +102,17 @@ export function TimetableDisplay({ config, entries, onReset }: TimetableDisplayP
                 <Download className="h-4 w-4 mr-2" />
                 Export PDF
               </Button>
-              <Button onClick={onReset} variant="outline" size="sm">
-                <RotateCcw className="h-4 w-4 mr-2" />
-                New Timetable
-              </Button>
+              {onSave && (
+                <Button onClick={onSave} variant="default" size="sm">
+                  Save to Admin Portal
+                </Button>
+              )}
+              {!hideResetButton && (
+                <Button onClick={onReset} variant="outline" size="sm">
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  New Timetable
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
