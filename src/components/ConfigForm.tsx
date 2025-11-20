@@ -1,4 +1,4 @@
-import React, { useState, useRef, KeyboardEvent } from "react";
+import React, { useState, useRef, KeyboardEvent, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -6,20 +6,38 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ConfigData, Faculty, Subject } from "@/types/timetable";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { FacultySubjectMapping } from "@/pages/FacultyManagement";
 
 interface ConfigFormProps {
   onComplete: (config: ConfigData) => void;
 }
 
 export function ConfigForm({ onComplete }: ConfigFormProps) {
-  const [step, setStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(1);
   const [year, setYear] = useState("");
   const [branch, setBranch] = useState("");
   const [section, setSection] = useState("");
-  const [subjectCount, setSubjectCount] = useState("");
-  const [labCount, setLabCount] = useState("");
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [labs, setLabs] = useState<Subject[]>([]);
+  const [faculty, setFaculty] = useState<Faculty[]>([]);
+  const [skipLabs, setSkipLabs] = useState(false);
+  const [facultyMappings, setFacultyMappings] = useState<FacultySubjectMapping[]>([]);
+
+  const [subjectName, setSubjectName] = useState("");
+  const [subjectCode, setSubjectCode] = useState("");
+  const [labName, setLabName] = useState("");
+  const [labCode, setLabCode] = useState("");
+
+  useEffect(() => {
+    const saved = localStorage.getItem("facultySubjectMappings");
+    if (saved) {
+      try {
+        setFacultyMappings(JSON.parse(saved));
+      } catch (error) {
+        console.error("Error loading faculty mappings:", error);
+      }
+    }
+  }, []);
 
   const handleStep1Next = () => {
     if (!year.trim()) {
@@ -30,60 +48,92 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
       toast.error("Please enter branch name");
       return;
     }
-    setStep(2);
+    setCurrentStep(2);
+  };
+
+  const addSubject = () => {
+    if (!subjectName.trim() || !subjectCode.trim()) {
+      toast.error("Please enter subject name and code");
+      return;
+    }
+
+    const newSubject: Subject = {
+      id: `subject-${Date.now()}`,
+      name: subjectName.trim(),
+      code: subjectCode.trim(),
+      isLab: false,
+    };
+
+    setSubjects([...subjects, newSubject]);
+    setSubjectName("");
+    setSubjectCode("");
+  };
+
+  const removeSubject = (id: string) => {
+    setSubjects(subjects.filter((s) => s.id !== id));
+  };
+
+  const addLab = () => {
+    if (!labName.trim() || !labCode.trim()) {
+      toast.error("Please enter lab name and code");
+      return;
+    }
+
+    const newLab: Subject = {
+      id: `lab-${Date.now()}`,
+      name: labName.trim(),
+      code: labCode.trim(),
+      isLab: true,
+    };
+
+    setLabs([...labs, newLab]);
+    setLabName("");
+    setLabCode("");
+  };
+
+  const removeLab = (id: string) => {
+    setLabs(labs.filter((l) => l.id !== id));
   };
 
   const handleStep2Next = () => {
-    const sCount = parseInt(subjectCount);
-    const lCount = parseInt(labCount);
-    
-    if (isNaN(sCount) || sCount < 1) {
-      toast.error("Please enter valid number of subjects");
+    if (subjects.length === 0) {
+      toast.error("Please add at least one subject");
       return;
     }
-    if (isNaN(lCount) || lCount < 0) {
-      toast.error("Please enter valid number of labs");
-      return;
+    if (skipLabs) {
+      generateAndComplete();
+    } else {
+      setCurrentStep(3);
     }
-    
-    setSubjects(
-      Array.from({ length: sCount }, (_, i) => ({
-        id: `subject-${i + 1}`,
-        name: "",
-        code: "",
-        isLab: false,
-        facultyName: "",
-      }))
-    );
-    setLabs(
-      Array.from({ length: lCount }, (_, i) => ({
-        id: `lab-${i + 1}`,
-        name: "",
-        code: "",
-        isLab: true,
-        facultyName: "",
-      }))
-    );
-    setStep(3);
   };
 
   const handleStep3Next = () => {
-    if (subjects.some((s) => !s.name.trim() || !s.code.trim() || !s.facultyName?.trim())) {
-      toast.error("Please enter all subject details including faculty name");
+    if (!skipLabs && labs.length === 0) {
+      toast.error("Please add at least one lab subject or go back and skip labs");
       return;
     }
-    if (labs.some((l) => !l.name.trim() || !l.code.trim() || !l.facultyName?.trim())) {
-      toast.error("Please enter all lab details including faculty name");
-      return;
-    }
+    generateAndComplete();
+  };
 
-    // Build faculty list from subjects and labs
-    // Each faculty-subject/lab combination gets a separate entry
+  const getFacultyForSubject = (subjectCode: string, subjectName: string): string => {
+    for (const mapping of facultyMappings) {
+      const matchingSubject = mapping.subjects.find(
+        (s) => s.code.toLowerCase() === subjectCode.toLowerCase() ||
+              s.name.toLowerCase() === subjectName.toLowerCase()
+      );
+      if (matchingSubject) {
+        return mapping.facultyName;
+      }
+    }
+    return "Unassigned Faculty";
+  };
+
+  const generateAndComplete = () => {
     const facultyList: Faculty[] = [];
     const allItems = [...subjects, ...labs];
-    
+
     allItems.forEach((item) => {
-      const facultyName = item.facultyName!;
+      const facultyName = getFacultyForSubject(item.code, item.name);
       facultyList.push({
         id: `faculty-${facultyList.length + 1}`,
         name: facultyName,
@@ -102,18 +152,6 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
     };
 
     onComplete(config);
-  };
-
-  const updateSubject = (index: number, field: 'name' | 'code' | 'facultyName', value: string) => {
-    const updated = [...subjects];
-    updated[index] = { ...updated[index], [field]: value };
-    setSubjects(updated);
-  };
-
-  const updateLab = (index: number, field: 'name' | 'code' | 'facultyName', value: string) => {
-    const updated = [...labs];
-    updated[index] = { ...updated[index], [field]: value };
-    setLabs(updated);
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>, action?: () => void) => {
@@ -138,15 +176,16 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
     <div className="max-w-2xl mx-auto p-6">
       <Card>
         <CardHeader>
-          <CardTitle>Configure Timetable - Step {step} of 3</CardTitle>
+          <CardTitle>Configure Timetable - Step {currentStep} of {skipLabs ? 2 : 3}</CardTitle>
           <CardDescription>
-            {step === 1 && "Enter year, branch and section information"}
-            {step === 2 && "Specify number of subjects and labs"}
-            {step === 3 && "Enter subject, lab, and faculty details"}
+            {currentStep === 1 && "Enter year, branch and section information"}
+            {currentStep === 2 && "Add subjects for timetable"}
+            {currentStep === 3 && "Add lab subjects (optional)"}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {step === 1 && (
+          {/* Step 1: Year, Branch, Section */}
+          {currentStep === 1 && (
             <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
               <div className="space-y-2">
                 <Label htmlFor="year">Year *</Label>
@@ -189,142 +228,153 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
             </form>
           )}
 
-          {step === 2 && (
+          {/* Step 2: Add Subjects */}
+          {currentStep === 2 && (
             <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
-              <div className="space-y-2">
-                <Label htmlFor="subjectCount">Number of Subjects *</Label>
-                <Input
-                  id="subjectCount"
-                  type="number"
-                  min="1"
-                  placeholder="e.g., 5"
-                  value={subjectCount}
-                  onChange={(e) => setSubjectCount(e.target.value)}
-                  onKeyDown={(e) => handleKeyDown(e)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="labCount">Number of Labs *</Label>
-                <Input
-                  id="labCount"
-                  type="number"
-                  min="0"
-                  placeholder="e.g., 2"
-                  value={labCount}
-                  onChange={(e) => setLabCount(e.target.value)}
-                  onKeyDown={(e) => handleKeyDown(e, handleStep2Next)}
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
-                  Back
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="subjectCode">Subject Code *</Label>
+                    <Input
+                      id="subjectCode"
+                      placeholder="e.g., CS401"
+                      value={subjectCode}
+                      onChange={(e) => setSubjectCode(e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(e)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="subjectName">Subject Name *</Label>
+                    <Input
+                      id="subjectName"
+                      placeholder="e.g., Data Structures"
+                      value={subjectName}
+                      onChange={(e) => setSubjectName(e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(e, addSubject)}
+                    />
+                  </div>
+                </div>
+                <Button onClick={addSubject} variant="outline" className="w-full gap-2">
+                  <Plus className="h-4 w-4" />
+                  Add Subject
                 </Button>
-                <Button onClick={handleStep2Next} className="flex-1">
-                  Next
-                </Button>
+
+                {subjects.length > 0 && (
+                  <div className="space-y-2">
+                    <h3 className="font-semibold">Added Subjects ({subjects.length})</h3>
+                    <div className="space-y-2">
+                      {subjects.map((subject) => (
+                        <div
+                          key={subject.id}
+                          className="flex items-center justify-between bg-muted p-3 rounded-lg"
+                        >
+                          <div>
+                            <span className="font-semibold">{subject.code}</span> - {subject.name}
+                            <div className="text-sm text-muted-foreground">
+                              Faculty: {getFacultyForSubject(subject.code, subject.name)}
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeSubject(subject.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="skipLabs"
+                    checked={skipLabs}
+                    onChange={(e) => setSkipLabs(e.target.checked)}
+                    className="h-4 w-4"
+                  />
+                  <Label htmlFor="skipLabs" className="cursor-pointer">
+                    Skip lab subjects (optional)
+                  </Label>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setCurrentStep(1)} className="flex-1">
+                    Back
+                  </Button>
+                  <Button onClick={handleStep2Next} className="flex-1">
+                    {skipLabs ? "Generate Timetable" : "Next: Add Labs"}
+                  </Button>
+                </div>
               </div>
             </form>
           )}
 
-          {step === 3 && (
+          {/* Step 3: Add Labs */}
+          {currentStep === 3 && !skipLabs && (
             <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
-              {subjects.length > 0 && (
-                <div className="space-y-3">
-                  <h3 className="font-semibold">Subjects</h3>
-                  {subjects.map((subject, index) => (
-                    <div key={subject.id} className="grid grid-cols-3 gap-2">
-                      <div className="space-y-2">
-                        <Label htmlFor={`subject-${index}`}>
-                          Subject {index + 1} Name *
-                        </Label>
-                        <Input
-                          id={`subject-${index}`}
-                          placeholder="e.g., IoT"
-                          value={subject.name}
-                          onChange={(e) => updateSubject(index, 'name', e.target.value)}
-                          onKeyDown={(e) => handleKeyDown(e)}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor={`subject-code-${index}`}>
-                          Subject Code *
-                        </Label>
-                        <Input
-                          id={`subject-code-${index}`}
-                          placeholder="e.g., CS401"
-                          value={subject.code}
-                          onChange={(e) => updateSubject(index, 'code', e.target.value)}
-                          onKeyDown={(e) => handleKeyDown(e)}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor={`subject-faculty-${index}`}>
-                          Faculty Name *
-                        </Label>
-                        <Input
-                          id={`subject-faculty-${index}`}
-                          placeholder="e.g., Raj"
-                          value={subject.facultyName || ""}
-                          onChange={(e) => updateSubject(index, 'facultyName', e.target.value)}
-                          onKeyDown={(e) => handleKeyDown(e)}
-                        />
-                      </div>
-                    </div>
-                  ))}
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="labCode">Lab Code *</Label>
+                    <Input
+                      id="labCode"
+                      placeholder="e.g., CS401L"
+                      value={labCode}
+                      onChange={(e) => setLabCode(e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(e)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="labName">Lab Name *</Label>
+                    <Input
+                      id="labName"
+                      placeholder="e.g., Data Structures Lab"
+                      value={labName}
+                      onChange={(e) => setLabName(e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(e, addLab)}
+                    />
+                  </div>
                 </div>
-              )}
+                <Button onClick={addLab} variant="outline" className="w-full gap-2">
+                  <Plus className="h-4 w-4" />
+                  Add Lab
+                </Button>
 
-              {labs.length > 0 && (
-                <div className="space-y-3">
-                  <h3 className="font-semibold">Labs</h3>
-                  {labs.map((lab, index) => {
-                    const isLastField = index === labs.length - 1;
-                    return (
-                      <div key={lab.id} className="grid grid-cols-3 gap-2">
-                        <div className="space-y-2">
-                          <Label htmlFor={`lab-${index}`}>
-                            Lab {index + 1} Name *
-                          </Label>
-                          <Input
-                            id={`lab-${index}`}
-                            placeholder="e.g., IoT Lab"
-                            value={lab.name}
-                            onChange={(e) => updateLab(index, 'name', e.target.value)}
-                            onKeyDown={(e) => handleKeyDown(e)}
-                          />
+                {labs.length > 0 && (
+                  <div className="space-y-2">
+                    <h3 className="font-semibold">Added Labs ({labs.length})</h3>
+                    <div className="space-y-2">
+                      {labs.map((lab) => (
+                        <div
+                          key={lab.id}
+                          className="flex items-center justify-between bg-muted p-3 rounded-lg"
+                        >
+                          <div>
+                            <span className="font-semibold">{lab.code}</span> - {lab.name}
+                            <div className="text-sm text-muted-foreground">
+                              Faculty: {getFacultyForSubject(lab.code, lab.name)}
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeLab(lab.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
                         </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={`lab-code-${index}`}>
-                            Lab Code *
-                          </Label>
-                          <Input
-                            id={`lab-code-${index}`}
-                            placeholder="e.g., CS401L"
-                            value={lab.code}
-                            onChange={(e) => updateLab(index, 'code', e.target.value)}
-                            onKeyDown={(e) => handleKeyDown(e)}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={`lab-faculty-${index}`}>
-                            Faculty Name *
-                          </Label>
-                          <Input
-                            id={`lab-faculty-${index}`}
-                            placeholder="e.g., Raj"
-                            value={lab.facultyName || ""}
-                            onChange={(e) => updateLab(index, 'facultyName', e.target.value)}
-                            onKeyDown={(e) => handleKeyDown(e, isLastField ? handleStep3Next : undefined)}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setStep(2)} className="flex-1">
+                <Button variant="outline" onClick={() => setCurrentStep(2)} className="flex-1">
                   Back
                 </Button>
                 <Button onClick={handleStep3Next} className="flex-1">

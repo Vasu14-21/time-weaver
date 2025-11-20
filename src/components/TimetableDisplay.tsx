@@ -1,8 +1,10 @@
+import React, { useState } from "react";
 import { TimetableEntry, ConfigData } from "@/types/timetable";
 import { DAYS, TIME_SLOTS } from "@/utils/timetableGenerator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Download, RotateCcw } from "lucide-react";
+import { Download, RotateCcw, Edit } from "lucide-react";
+import { TimetableEditor } from "./TimetableEditor";
 
 interface TimetableDisplayProps {
   config: ConfigData;
@@ -10,9 +12,20 @@ interface TimetableDisplayProps {
   onReset: () => void;
   onSave?: () => void;
   hideResetButton?: boolean;
+  onUpdateEntry?: (updatedEntry: TimetableEntry, oldEntry?: TimetableEntry) => void;
+  enableEdit?: boolean;
 }
 
-export function TimetableDisplay({ config, entries, onReset, onSave, hideResetButton }: TimetableDisplayProps) {
+export function TimetableDisplay({ 
+  config, 
+  entries, 
+  onReset, 
+  onSave, 
+  hideResetButton,
+  onUpdateEntry,
+  enableEdit = false
+}: TimetableDisplayProps) {
+  const [editingEntry, setEditingEntry] = useState<{ entry: TimetableEntry | null; day: string; period: number } | null>(null);
   const getEntry = (day: string, period: number) => {
     return entries.find((e) => e.day === day && e.period === period);
   };
@@ -24,9 +37,36 @@ export function TimetableDisplay({ config, entries, onReset, onSave, hideResetBu
     return lab?.name || "";
   };
 
+  const getSubjectCode = (subjectId: string) => {
+    const subject = config.subjects.find((s) => s.id === subjectId);
+    if (subject) return subject.code;
+    const lab = config.labs.find((l) => l.id === subjectId);
+    return lab?.code || "";
+  };
+
   const getFacultyName = (facultyId: string) => {
     const faculty = config.faculty.find((f) => f.id === facultyId);
     return faculty?.name || "";
+  };
+
+  const handleEditEntry = (day: string, period: number) => {
+    const entry = getEntry(day, period);
+    setEditingEntry({ entry: entry || null, day, period });
+  };
+
+  const handleSaveEntry = (updatedEntry: TimetableEntry) => {
+    if (onUpdateEntry) {
+      const oldEntry = editingEntry?.entry;
+      onUpdateEntry(updatedEntry, oldEntry);
+    }
+    setEditingEntry(null);
+  };
+
+  const handleDeleteEntry = () => {
+    if (onUpdateEntry && editingEntry?.entry) {
+      onUpdateEntry(editingEntry.entry, editingEntry.entry);
+    }
+    setEditingEntry(null);
   };
 
   const handlePrint = () => {
@@ -107,6 +147,12 @@ export function TimetableDisplay({ config, entries, onReset, onSave, hideResetBu
                   Save to Admin Portal
                 </Button>
               )}
+              {enableEdit && (
+                <Button variant="outline" size="sm" disabled className="gap-2">
+                  <Edit className="h-4 w-4" />
+                  Edit Mode Active
+                </Button>
+              )}
               {!hideResetButton && (
                 <Button onClick={onReset} variant="outline" size="sm">
                   <RotateCcw className="h-4 w-4 mr-2" />
@@ -160,9 +206,14 @@ export function TimetableDisplay({ config, entries, onReset, onSave, hideResetBu
                         return (
                           <td
                             key={idx}
-                            className="border border-border p-2 text-center"
+                            className={`border border-border p-2 text-center ${
+                              enableEdit ? "cursor-pointer hover:bg-muted/50" : ""
+                            }`}
+                            onClick={() => enableEdit && handleEditEntry(day, slot.period)}
                           >
-                            <div className="text-xs text-muted-foreground">-</div>
+                            <div className="text-xs text-muted-foreground">
+                              {enableEdit ? "Click to add" : "-"}
+                            </div>
                           </td>
                         );
                       }
@@ -175,9 +226,15 @@ export function TimetableDisplay({ config, entries, onReset, onSave, hideResetBu
                       return (
                         <td
                           key={idx}
-                          className={`border border-border p-2 ${bgClass}`}
+                          className={`border border-border p-2 ${bgClass} ${
+                            enableEdit ? "cursor-pointer hover:opacity-80" : ""
+                          }`}
+                          onClick={() => enableEdit && handleEditEntry(day, slot.period)}
                         >
-                          <div className="text-sm font-semibold">
+                          <div className="text-xs font-semibold text-muted-foreground">
+                            {getSubjectCode(entry.subjectId)}
+                          </div>
+                          <div className="text-sm font-semibold mt-1">
                             {getSubjectName(entry.subjectId)}
                           </div>
                           <div className="text-xs mt-1 opacity-90">
@@ -208,6 +265,19 @@ export function TimetableDisplay({ config, entries, onReset, onSave, hideResetBu
           </div>
         </CardContent>
       </Card>
+
+      {editingEntry && (
+        <TimetableEditor
+          isOpen={true}
+          onClose={() => setEditingEntry(null)}
+          entry={editingEntry.entry}
+          day={editingEntry.day}
+          period={editingEntry.period}
+          config={config}
+          onSave={handleSaveEntry}
+          onDelete={handleDeleteEntry}
+        />
+      )}
     </div>
   );
 }
