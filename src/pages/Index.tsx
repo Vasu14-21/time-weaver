@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { ConfigForm } from "@/components/ConfigForm";
 import { TimetableDisplay } from "@/components/TimetableDisplay";
 import { Navigation } from "@/components/Navigation";
@@ -6,9 +6,8 @@ import { ConfigData, Timetable, SavedTimetable } from "@/types/timetable";
 import { generateTimetable } from "@/utils/timetableGenerator";
 import { detectFacultyConflicts } from "@/utils/conflictDetection";
 import { toast } from "sonner";
-import { Calendar } from "lucide-react";
+import { Calendar, AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertTriangle } from "lucide-react";
 
 const Index = () => {
   const [timetable, setTimetable] = useState<Timetable | null>(null);
