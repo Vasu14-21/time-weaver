@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Navigation } from "@/components/Navigation";
 import { SavedTimetable } from "@/types/timetable";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
