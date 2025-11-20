@@ -30,11 +30,17 @@ export interface TimetableEntry {
 }
 
 export interface ConfigData {
+  year: string;
   branch: string;
   section?: string;
   faculty: Faculty[];
   subjects: Subject[];
   labs: Subject[];
+}
+
+export interface SavedTimetable extends Timetable {
+  id: string;
+  createdAt: string;
 }
 
 export interface Timetable {
