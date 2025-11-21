@@ -250,15 +250,20 @@ const AdminPortal = () => {
                               {ttConflicts.map((conflict, idx) => (
                                 <div
                                   key={idx}
-                                  className="text-sm bg-destructive/10 p-2 rounded"
+                                  className="text-sm bg-destructive/10 p-3 rounded border border-destructive/20"
                                 >
                                   <strong>{conflict.facultyName}</strong> is scheduled
                                   for multiple classes on <strong>{conflict.day}</strong>{" "}
                                   at <strong>{conflict.timeSlot}</strong>:
-                                  <ul className="list-disc list-inside ml-4 mt-1">
+                                  <ul className="list-none ml-4 mt-2 space-y-1">
                                     {conflict.conflictingTimetables.map((ct) => (
-                                      <li key={ct.id}>
-                                        {ct.year} - {ct.branch} ({ct.subjectName})
+                                      <li key={ct.id} className="flex items-center gap-2">
+                                        <Badge variant="outline" className="font-semibold">
+                                          {ct.branch}
+                                        </Badge>
+                                        <span className="text-muted-foreground">
+                                          {ct.year} - {ct.subjectName}
+                                        </span>
                                       </li>
                                     ))}
                                   </ul>
