@@ -15,6 +15,8 @@ export interface FacultySubjectMapping {
     id: string;
     name: string;
     code: string;
+    labName?: string;
+    labCode?: string;
   }>;
 }
 
@@ -23,6 +25,8 @@ const FacultyManagement = () => {
   const [newFacultyName, setNewFacultyName] = useState("");
   const [newSubjectName, setNewSubjectName] = useState("");
   const [newSubjectCode, setNewSubjectCode] = useState("");
+  const [newLabName, setNewLabName] = useState("");
+  const [newLabCode, setNewLabCode] = useState("");
   const [selectedFacultyId, setSelectedFacultyId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -71,16 +75,23 @@ const FacultyManagement = () => {
 
     const updated = facultyMappings.map((mapping) => {
       if (mapping.id === facultyId) {
+        const newSubject: any = {
+          id: `subject-${Date.now()}`,
+          name: newSubjectName.trim(),
+          code: newSubjectCode.trim(),
+        };
+        
+        // Add lab fields if provided
+        if (newLabName.trim()) {
+          newSubject.labName = newLabName.trim();
+        }
+        if (newLabCode.trim()) {
+          newSubject.labCode = newLabCode.trim();
+        }
+
         return {
           ...mapping,
-          subjects: [
-            ...mapping.subjects,
-            {
-              id: `subject-${Date.now()}`,
-              name: newSubjectName.trim(),
-              code: newSubjectCode.trim(),
-            },
-          ],
+          subjects: [...mapping.subjects, newSubject],
         };
       }
       return mapping;
@@ -89,6 +100,8 @@ const FacultyManagement = () => {
     saveFacultyMappings(updated);
     setNewSubjectName("");
     setNewSubjectCode("");
+    setNewLabName("");
+    setNewLabCode("");
     setSelectedFacultyId(null);
   };
 
@@ -188,17 +201,26 @@ const FacultyManagement = () => {
                   <div className="mb-4">
                     <div className="flex flex-wrap gap-2 mb-4">
                       {mapping.subjects.map((subject) => (
-                        <Badge key={subject.id} variant="secondary" className="gap-2 px-3 py-1">
-                          <span className="font-semibold">{subject.code}</span>
-                          <span>-</span>
-                          <span>{subject.name}</span>
-                          <button
-                            onClick={() => removeSubject(mapping.id, subject.id)}
-                            className="ml-1 hover:text-destructive"
-                          >
-                            ×
-                          </button>
-                        </Badge>
+                        <div key={subject.id} className="flex flex-col gap-1">
+                          <Badge variant="secondary" className="gap-2 px-3 py-1">
+                            <span className="font-semibold">{subject.code}</span>
+                            <span>-</span>
+                            <span>{subject.name}</span>
+                            <button
+                              onClick={() => removeSubject(mapping.id, subject.id)}
+                              className="ml-1 hover:text-destructive"
+                            >
+                              ×
+                            </button>
+                          </Badge>
+                          {(subject.labName || subject.labCode) && (
+                            <Badge variant="outline" className="gap-2 px-3 py-1 text-xs">
+                              <span className="font-semibold">{subject.labCode}</span>
+                              <span>-</span>
+                              <span>{subject.labName}</span>
+                            </Badge>
+                          )}
+                        </div>
                       ))}
                       {mapping.subjects.length === 0 && (
                         <p className="text-sm text-muted-foreground">No subjects assigned yet</p>
@@ -209,25 +231,50 @@ const FacultyManagement = () => {
                   {/* Add Subject */}
                   {selectedFacultyId === mapping.id ? (
                     <div className="space-y-3 border-t pt-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor={`subjectCode-${mapping.id}`}>Subject Code</Label>
-                          <Input
-                            id={`subjectCode-${mapping.id}`}
-                            value={newSubjectCode}
-                            onChange={(e) => setNewSubjectCode(e.target.value)}
-                            placeholder="e.g., CS101"
-                          />
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor={`subjectCode-${mapping.id}`}>Subject Code *</Label>
+                            <Input
+                              id={`subjectCode-${mapping.id}`}
+                              value={newSubjectCode}
+                              onChange={(e) => setNewSubjectCode(e.target.value)}
+                              placeholder="e.g., CS101"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor={`subjectName-${mapping.id}`}>Subject Name *</Label>
+                            <Input
+                              id={`subjectName-${mapping.id}`}
+                              value={newSubjectName}
+                              onChange={(e) => setNewSubjectName(e.target.value)}
+                              placeholder="e.g., Data Structures"
+                            />
+                          </div>
                         </div>
-                        <div>
-                          <Label htmlFor={`subjectName-${mapping.id}`}>Subject Name</Label>
-                          <Input
-                            id={`subjectName-${mapping.id}`}
-                            value={newSubjectName}
-                            onChange={(e) => setNewSubjectName(e.target.value)}
-                            placeholder="e.g., Data Structures"
-                            onKeyDown={(e) => e.key === "Enter" && addSubjectToFaculty(mapping.id)}
-                          />
+                        <div className="border-t pt-3">
+                          <p className="text-sm text-muted-foreground mb-2">Lab Information (Optional)</p>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label htmlFor={`labCode-${mapping.id}`}>Lab Code</Label>
+                              <Input
+                                id={`labCode-${mapping.id}`}
+                                value={newLabCode}
+                                onChange={(e) => setNewLabCode(e.target.value)}
+                                placeholder="e.g., CS101L"
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor={`labName-${mapping.id}`}>Lab Name</Label>
+                              <Input
+                                id={`labName-${mapping.id}`}
+                                value={newLabName}
+                                onChange={(e) => setNewLabName(e.target.value)}
+                                placeholder="e.g., Data Structures Lab"
+                                onKeyDown={(e) => e.key === "Enter" && addSubjectToFaculty(mapping.id)}
+                              />
+                            </div>
+                          </div>
                         </div>
                       </div>
                       <div className="flex gap-2">
@@ -240,6 +287,8 @@ const FacultyManagement = () => {
                             setSelectedFacultyId(null);
                             setNewSubjectName("");
                             setNewSubjectCode("");
+                            setNewLabName("");
+                            setNewLabCode("");
                           }}
                           variant="outline"
                           size="sm"
