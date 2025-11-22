@@ -15,8 +15,11 @@ export interface FacultySubjectMapping {
     id: string;
     name: string;
     code: string;
-    labName?: string;
-    labCode?: string;
+  }>;
+  labs: Array<{
+    id: string;
+    name: string;
+    code: string;
   }>;
 }
 
@@ -28,6 +31,7 @@ const FacultyManagement = () => {
   const [newLabName, setNewLabName] = useState("");
   const [newLabCode, setNewLabCode] = useState("");
   const [selectedFacultyId, setSelectedFacultyId] = useState<string | null>(null);
+  const [addingType, setAddingType] = useState<'subject' | 'lab' | null>(null);
 
   useEffect(() => {
     loadFacultyMappings();
@@ -60,6 +64,7 @@ const FacultyManagement = () => {
       id: `faculty-${Date.now()}`,
       facultyName: newFacultyName.trim(),
       subjects: [],
+      labs: [],
     };
 
     const updated = [...facultyMappings, newMapping];
@@ -68,41 +73,60 @@ const FacultyManagement = () => {
   };
 
   const addSubjectToFaculty = (facultyId: string) => {
-    if (!newSubjectName.trim() || !newSubjectCode.trim()) {
-      toast.error("Please enter both subject name and code");
-      return;
+    if (addingType === 'subject') {
+      if (!newSubjectName.trim() || !newSubjectCode.trim()) {
+        toast.error("Please enter both subject name and code");
+        return;
+      }
+
+      const updated = facultyMappings.map((mapping) => {
+        if (mapping.id === facultyId) {
+          const newSubject = {
+            id: `subject-${Date.now()}`,
+            name: newSubjectName.trim(),
+            code: newSubjectCode.trim(),
+          };
+
+          return {
+            ...mapping,
+            subjects: [...mapping.subjects, newSubject],
+          };
+        }
+        return mapping;
+      });
+
+      saveFacultyMappings(updated);
+    } else if (addingType === 'lab') {
+      if (!newLabName.trim() || !newLabCode.trim()) {
+        toast.error("Please enter both lab name and code");
+        return;
+      }
+
+      const updated = facultyMappings.map((mapping) => {
+        if (mapping.id === facultyId) {
+          const newLab = {
+            id: `lab-${Date.now()}`,
+            name: newLabName.trim(),
+            code: newLabCode.trim(),
+          };
+
+          return {
+            ...mapping,
+            labs: [...mapping.labs, newLab],
+          };
+        }
+        return mapping;
+      });
+
+      saveFacultyMappings(updated);
     }
 
-    const updated = facultyMappings.map((mapping) => {
-      if (mapping.id === facultyId) {
-        const newSubject: any = {
-          id: `subject-${Date.now()}`,
-          name: newSubjectName.trim(),
-          code: newSubjectCode.trim(),
-        };
-        
-        // Add lab fields if provided
-        if (newLabName.trim()) {
-          newSubject.labName = newLabName.trim();
-        }
-        if (newLabCode.trim()) {
-          newSubject.labCode = newLabCode.trim();
-        }
-
-        return {
-          ...mapping,
-          subjects: [...mapping.subjects, newSubject],
-        };
-      }
-      return mapping;
-    });
-
-    saveFacultyMappings(updated);
     setNewSubjectName("");
     setNewSubjectCode("");
     setNewLabName("");
     setNewLabCode("");
     setSelectedFacultyId(null);
+    setAddingType(null);
   };
 
   const removeSubject = (facultyId: string, subjectId: string) => {
@@ -111,6 +135,20 @@ const FacultyManagement = () => {
         return {
           ...mapping,
           subjects: mapping.subjects.filter((s) => s.id !== subjectId),
+        };
+      }
+      return mapping;
+    });
+
+    saveFacultyMappings(updated);
+  };
+
+  const removeLab = (facultyId: string, labId: string) => {
+    const updated = facultyMappings.map((mapping) => {
+      if (mapping.id === facultyId) {
+        return {
+          ...mapping,
+          labs: mapping.labs.filter((l) => l.id !== labId),
         };
       }
       return mapping;
@@ -184,7 +222,7 @@ const FacultyManagement = () => {
                     <div>
                       <CardTitle>{mapping.facultyName}</CardTitle>
                       <CardDescription>
-                        {mapping.subjects.length} subject(s) assigned
+                        {mapping.subjects.length} subject(s) • {mapping.labs.length} lab(s) assigned
                       </CardDescription>
                     </div>
                     <Button
@@ -197,12 +235,14 @@ const FacultyManagement = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {/* Subject List */}
-                  <div className="mb-4">
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      {mapping.subjects.map((subject) => (
-                        <div key={subject.id} className="flex flex-col gap-1">
-                          <Badge variant="secondary" className="gap-2 px-3 py-1">
+                  {/* Subject and Lab Lists */}
+                  <div className="mb-4 space-y-4">
+                    {/* Theory Subjects */}
+                    <div>
+                      <h4 className="text-sm font-semibold mb-2">Theory Subjects (SUB)</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {mapping.subjects.map((subject) => (
+                          <Badge key={subject.id} variant="secondary" className="gap-2 px-3 py-1">
                             <span className="font-semibold">{subject.code}</span>
                             <span>-</span>
                             <span>{subject.name}</span>
@@ -213,47 +253,70 @@ const FacultyManagement = () => {
                               ×
                             </button>
                           </Badge>
-                          {(subject.labName || subject.labCode) && (
-                            <Badge variant="outline" className="gap-2 px-3 py-1 text-xs">
-                              <span className="font-semibold">{subject.labCode}</span>
-                              <span>-</span>
-                              <span>{subject.labName}</span>
-                            </Badge>
-                          )}
-                        </div>
-                      ))}
-                      {mapping.subjects.length === 0 && (
-                        <p className="text-sm text-muted-foreground">No subjects assigned yet</p>
-                      )}
+                        ))}
+                        {mapping.subjects.length === 0 && (
+                          <p className="text-sm text-muted-foreground">No subjects assigned yet</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Lab Subjects */}
+                    <div>
+                      <h4 className="text-sm font-semibold mb-2">Lab Subjects (LAB - 3 hour blocks)</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {mapping.labs.map((lab) => (
+                          <Badge key={lab.id} variant="outline" className="gap-2 px-3 py-1">
+                            <span className="font-semibold">{lab.code}</span>
+                            <span>-</span>
+                            <span>{lab.name}</span>
+                            <button
+                              onClick={() => removeLab(mapping.id, lab.id)}
+                              className="ml-1 hover:text-destructive"
+                            >
+                              ×
+                            </button>
+                          </Badge>
+                        ))}
+                        {mapping.labs.length === 0 && (
+                          <p className="text-sm text-muted-foreground">No labs assigned yet</p>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Add Subject */}
-                  {selectedFacultyId === mapping.id ? (
+                  {/* Add Subject or Lab */}
+                  {selectedFacultyId === mapping.id && addingType ? (
                     <div className="space-y-3 border-t pt-4">
-                      <div className="space-y-3">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <Label htmlFor={`subjectCode-${mapping.id}`}>Subject Code *</Label>
-                            <Input
-                              id={`subjectCode-${mapping.id}`}
-                              value={newSubjectCode}
-                              onChange={(e) => setNewSubjectCode(e.target.value)}
-                              placeholder="e.g., CS101"
-                            />
-                          </div>
-                          <div>
-                            <Label htmlFor={`subjectName-${mapping.id}`}>Subject Name *</Label>
-                            <Input
-                              id={`subjectName-${mapping.id}`}
-                              value={newSubjectName}
-                              onChange={(e) => setNewSubjectName(e.target.value)}
-                              placeholder="e.g., Data Structures"
-                            />
+                      {addingType === 'subject' && (
+                        <div className="space-y-3">
+                          <h4 className="font-semibold">Add Theory Subject</h4>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label htmlFor={`subjectCode-${mapping.id}`}>Subject Code</Label>
+                              <Input
+                                id={`subjectCode-${mapping.id}`}
+                                value={newSubjectCode}
+                                onChange={(e) => setNewSubjectCode(e.target.value)}
+                                placeholder="e.g., CS101"
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor={`subjectName-${mapping.id}`}>Subject Name</Label>
+                              <Input
+                                id={`subjectName-${mapping.id}`}
+                                value={newSubjectName}
+                                onChange={(e) => setNewSubjectName(e.target.value)}
+                                placeholder="e.g., Data Structures"
+                                onKeyDown={(e) => e.key === "Enter" && addSubjectToFaculty(mapping.id)}
+                              />
+                            </div>
                           </div>
                         </div>
-                        <div className="border-t pt-3">
-                          <p className="text-sm text-muted-foreground mb-2">Lab Information (Optional)</p>
+                      )}
+
+                      {addingType === 'lab' && (
+                        <div className="space-y-3">
+                          <h4 className="font-semibold">Add Lab Subject (3-hour block)</h4>
                           <div className="grid grid-cols-2 gap-4">
                             <div>
                               <Label htmlFor={`labCode-${mapping.id}`}>Lab Code</Label>
@@ -276,15 +339,17 @@ const FacultyManagement = () => {
                             </div>
                           </div>
                         </div>
-                      </div>
+                      )}
+
                       <div className="flex gap-2">
                         <Button onClick={() => addSubjectToFaculty(mapping.id)} size="sm">
                           <Save className="h-4 w-4 mr-2" />
-                          Save Subject
+                          Save {addingType === 'subject' ? 'Subject' : 'Lab'}
                         </Button>
                         <Button
                           onClick={() => {
                             setSelectedFacultyId(null);
+                            setAddingType(null);
                             setNewSubjectName("");
                             setNewSubjectCode("");
                             setNewLabName("");
@@ -298,15 +363,32 @@ const FacultyManagement = () => {
                       </div>
                     </div>
                   ) : (
-                    <Button
-                      onClick={() => setSelectedFacultyId(mapping.id)}
-                      variant="outline"
-                      size="sm"
-                      className="gap-2"
-                    >
-                      <Plus className="h-4 w-4" />
-                      Add Subject
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => {
+                          setSelectedFacultyId(mapping.id);
+                          setAddingType('subject');
+                        }}
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                      >
+                        <Plus className="h-4 w-4" />
+                        Add Subject
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          setSelectedFacultyId(mapping.id);
+                          setAddingType('lab');
+                        }}
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                      >
+                        <Plus className="h-4 w-4" />
+                        Add Lab
+                      </Button>
+                    </div>
                   )}
                 </CardContent>
               </Card>
