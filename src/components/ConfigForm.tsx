@@ -97,13 +97,26 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
       let subjectCode = "";
       let subjectName = "";
       
-      if (mapping && mapping.subjects.length > 0) {
-        const subject = mapping.subjects[0];
-        subjectCode = subject.code;
-        subjectName = subject.name;
+      if (isLab) {
+        // For labs, check if faculty has lab mappings
+        if (mapping && mapping.labs && mapping.labs.length > 0) {
+          const lab = mapping.labs[0];
+          subjectCode = lab.code;
+          subjectName = lab.name;
+        } else {
+          subjectCode = `LAB${index - theory + 1}`;
+          subjectName = `${facultyName} Lab`;
+        }
       } else {
-        subjectCode = isLab ? `LAB${index + 1}` : `SUB${index + 1}`;
-        subjectName = `${facultyName} ${isLab ? 'Lab' : 'Subject'}`;
+        // For subjects, check if faculty has subject mappings
+        if (mapping && mapping.subjects && mapping.subjects.length > 0) {
+          const subject = mapping.subjects[0];
+          subjectCode = subject.code;
+          subjectName = subject.name;
+        } else {
+          subjectCode = `SUB${index + 1}`;
+          subjectName = `${facultyName} Subject`;
+        }
       }
 
       const subjectItem: Subject = {
