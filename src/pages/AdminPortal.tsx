@@ -155,8 +155,11 @@ const AdminPortal = () => {
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>Faculty Conflicts Detected</AlertTitle>
             <AlertDescription>
-              {conflicts.length} scheduling conflict(s) found where faculty members are
-              assigned to multiple classes at the same time.
+              <p>{conflicts.length} scheduling conflict(s) found where faculty members are
+              assigned to multiple classes at the same time.</p>
+              <p className="text-xs mt-1 opacity-80">
+                This alert auto-updates when you make changes to timetables
+              </p>
             </AlertDescription>
           </Alert>
         )}
@@ -224,7 +227,7 @@ const AdminPortal = () => {
                             </div>
                             <div className="flex gap-2">
                               <Button
-                                variant="outline"
+                                variant="green"
                                 size="sm"
                                 onClick={() => setSelectedTimetable(tt)}
                               >
@@ -232,7 +235,7 @@ const AdminPortal = () => {
                                 View
                               </Button>
                               <Button
-                                variant="destructive"
+                                variant="red"
                                 size="sm"
                                 onClick={() => deleteTimetable(tt.id)}
                               >
