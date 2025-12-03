@@ -229,7 +229,7 @@ const FacultyManagement = () => {
                     <div>
                       <CardTitle>{mapping.facultyName}</CardTitle>
                       <CardDescription>
-                        {mapping.subjects.length} subject(s) • {mapping.labs.length} lab(s) assigned
+                        {(mapping.subjects || []).length} subject(s) • {(mapping.labs || []).length} lab(s) assigned
                       </CardDescription>
                     </div>
                     <Button
@@ -248,7 +248,7 @@ const FacultyManagement = () => {
                     <div>
                       <h4 className="text-sm font-semibold mb-2">Theory Subjects (SUB)</h4>
                       <div className="flex flex-wrap gap-2">
-                        {mapping.subjects.map((subject) => (
+                        {(mapping.subjects || []).map((subject) => (
                           <Badge key={subject.id} variant="secondary" className="gap-2 px-3 py-1">
                             <span className="font-semibold">{subject.code}</span>
                             <span>-</span>
@@ -261,7 +261,7 @@ const FacultyManagement = () => {
                             </button>
                           </Badge>
                         ))}
-                        {mapping.subjects.length === 0 && (
+                        {(mapping.subjects || []).length === 0 && (
                           <p className="text-sm text-muted-foreground">No subjects assigned yet</p>
                         )}
                       </div>
@@ -271,7 +271,7 @@ const FacultyManagement = () => {
                     <div>
                       <h4 className="text-sm font-semibold mb-2">Lab Subjects (LAB - 3 hour blocks)</h4>
                       <div className="flex flex-wrap gap-2">
-                        {mapping.labs.map((lab) => (
+                        {(mapping.labs || []).map((lab) => (
                           <Badge key={lab.id} variant="outline" className="gap-2 px-3 py-1">
                             <span className="font-semibold">{lab.code}</span>
                             <span>-</span>
@@ -284,7 +284,7 @@ const FacultyManagement = () => {
                             </button>
                           </Badge>
                         ))}
-                        {mapping.labs.length === 0 && (
+                        {(mapping.labs || []).length === 0 && (
                           <p className="text-sm text-muted-foreground">No labs assigned yet</p>
                         )}
                       </div>
