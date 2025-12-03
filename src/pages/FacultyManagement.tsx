@@ -41,7 +41,14 @@ const FacultyManagement = () => {
     const saved = localStorage.getItem("facultySubjectMappings");
     if (saved) {
       try {
-        setFacultyMappings(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        // Migrate old data structure to new one with separate subjects and labs arrays
+        const migrated = parsed.map((mapping: any) => ({
+          ...mapping,
+          subjects: mapping.subjects || [],
+          labs: mapping.labs || [],
+        }));
+        setFacultyMappings(migrated);
       } catch (error) {
         console.error("Error loading faculty mappings:", error);
       }
