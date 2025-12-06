@@ -27,6 +27,14 @@ export interface TimetableEntry {
   subjectId: string;
   facultyId: string;
   isLab?: boolean;
+  isSpecial?: boolean;
+  specialType?: 'sports' | 'library' | 'training';
+}
+
+export interface SpecialPeriods {
+  sports: boolean;
+  library: boolean;
+  training: boolean;
 }
 
 export interface ConfigData {
@@ -36,6 +44,7 @@ export interface ConfigData {
   faculty: Faculty[];
   subjects: Subject[];
   labs: Subject[];
+  specialPeriods?: SpecialPeriods;
 }
 
 export interface SavedTimetable extends Timetable {

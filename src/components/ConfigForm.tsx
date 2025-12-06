@@ -3,10 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ConfigData, Faculty, Subject } from "@/types/timetable";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ConfigData, Faculty, Subject, SpecialPeriods } from "@/types/timetable";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { FacultySubjectMapping } from "@/pages/FacultyManagement";
+import { Badge } from "@/components/ui/badge";
 
 interface ConfigFormProps {
   onComplete: (config: ConfigData) => void;
@@ -25,6 +27,13 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
   const [theoryCount, setTheoryCount] = useState("");
   const [labCount, setLabCount] = useState("");
   const [selectedFaculty, setSelectedFaculty] = useState<string[]>([]);
+
+  // Special periods state
+  const [specialPeriods, setSpecialPeriods] = useState<SpecialPeriods>({
+    sports: false,
+    library: false,
+    training: false,
+  });
 
   useEffect(() => {
     const saved = localStorage.getItem("facultySubjectMappings");
@@ -73,6 +82,50 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
     setSelectedFaculty(updated);
   };
 
+  // Get filtered faculty list based on branch and section
+  const getFilteredFacultyForSubject = (isLab: boolean) => {
+    const branchUpper = branch.toUpperCase();
+    const sectionUpper = section.toUpperCase();
+
+    return facultyMappings.filter((mapping) => {
+      const items = isLab ? (mapping.labs || []) : (mapping.subjects || []);
+      return items.some((item) => {
+        const itemBranch = (item.branch || "").toUpperCase();
+        const itemSection = (item.section || "").toUpperCase();
+        
+        // Match branch
+        if (itemBranch !== branchUpper) return false;
+        
+        // If section is provided, match it; otherwise accept any
+        if (sectionUpper && itemSection && itemSection !== sectionUpper) return false;
+        
+        return true;
+      });
+    });
+  };
+
+  // Get subject/lab details for a faculty based on branch/section
+  const getFacultySubjectDetails = (facultyName: string, isLab: boolean) => {
+    const branchUpper = branch.toUpperCase();
+    const sectionUpper = section.toUpperCase();
+
+    const mapping = facultyMappings.find(m => m.facultyName === facultyName);
+    if (!mapping) return null;
+
+    const items = isLab ? (mapping.labs || []) : (mapping.subjects || []);
+    const matchedItem = items.find((item) => {
+      const itemBranch = (item.branch || "").toUpperCase();
+      const itemSection = (item.section || "").toUpperCase();
+      
+      if (itemBranch !== branchUpper) return false;
+      if (sectionUpper && itemSection && itemSection !== sectionUpper) return false;
+      
+      return true;
+    });
+
+    return matchedItem;
+  };
+
   const handleStep3Next = () => {
     const emptyCount = selectedFaculty.filter(f => !f.trim()).length;
     if (emptyCount > 0) {
@@ -92,27 +145,19 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
 
     selectedFaculty.forEach((facultyName, index) => {
       const isLab = index >= theory;
-      const mapping = facultyMappings.find(m => m.facultyName === facultyName);
+      const subjectDetails = getFacultySubjectDetails(facultyName, isLab);
       
       let subjectCode = "";
       let subjectName = "";
       
-      if (isLab) {
-        // For labs, check if faculty has lab mappings
-        if (mapping && mapping.labs && mapping.labs.length > 0) {
-          const lab = mapping.labs[0];
-          subjectCode = lab.code;
-          subjectName = lab.name;
-        } else {
+      if (subjectDetails) {
+        subjectCode = subjectDetails.code;
+        subjectName = subjectDetails.name;
+      } else {
+        // Fallback if no mapping found
+        if (isLab) {
           subjectCode = `LAB${index - theory + 1}`;
           subjectName = `${facultyName} Lab`;
-        }
-      } else {
-        // For subjects, check if faculty has subject mappings
-        if (mapping && mapping.subjects && mapping.subjects.length > 0) {
-          const subject = mapping.subjects[0];
-          subjectCode = subject.code;
-          subjectName = subject.name;
         } else {
           subjectCode = `SUB${index + 1}`;
           subjectName = `${facultyName} Subject`;
@@ -147,6 +192,7 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
       faculty: facultyList,
       subjects: subjectsList,
       labs: labsList,
+      specialPeriods,
     };
 
     onComplete(config);
@@ -170,6 +216,9 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
     }
   };
 
+  const filteredTheoryFaculty = getFilteredFacultyForSubject(false);
+  const filteredLabFaculty = getFilteredFacultyForSubject(true);
+
   return (
     <div className="max-w-2xl mx-auto p-6">
       <Card>
@@ -177,8 +226,8 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
           <CardTitle>Configure Timetable - Step {currentStep} of 3</CardTitle>
           <CardDescription>
             {currentStep === 1 && "Enter year, branch and section information"}
-            {currentStep === 2 && "Enter subject counts"}
-            {currentStep === 3 && "Select faculty members"}
+            {currentStep === 2 && "Enter subject counts and special periods"}
+            {currentStep === 3 && `Select faculty members for ${branch}${section ? `-${section}` : ''}`}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -211,10 +260,10 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="section">Section (Optional)</Label>
+                <Label htmlFor="section">Section</Label>
                 <Input
                   id="section"
-                  placeholder="e.g., A"
+                  placeholder="e.g., A (leave empty if no sections)"
                   value={section}
                   onChange={(e) => setSection(e.target.value.toUpperCase())}
                   onKeyDown={(e) => handleKeyDown(e, handleStep1Next)}
@@ -226,7 +275,7 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
             </form>
           )}
 
-          {/* Step 2: Subject Counts */}
+          {/* Step 2: Subject Counts and Special Periods */}
           {currentStep === 2 && (
             <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
               <div className="space-y-4">
@@ -252,9 +301,82 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
                     placeholder="e.g., 2"
                     value={labCount}
                     onChange={(e) => setLabCount(e.target.value)}
-                    onKeyDown={(e) => handleKeyDown(e, handleStep2Next)}
+                    onKeyDown={(e) => handleKeyDown(e)}
                   />
                   <p className="text-sm text-muted-foreground">Optional: Enter 0 to skip labs</p>
+                </div>
+
+                {/* Special Periods */}
+                <div className="space-y-3 border-t pt-4">
+                  <Label className="text-base font-semibold">Special Periods (Optional)</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Select any special periods to include in the timetable
+                  </p>
+                  
+                  <div className="space-y-3">
+                    <div className="flex items-start space-x-3">
+                      <Checkbox
+                        id="sports"
+                        checked={specialPeriods.sports}
+                        onCheckedChange={(checked) =>
+                          setSpecialPeriods({ ...specialPeriods, sports: checked as boolean })
+                        }
+                      />
+                      <div className="grid gap-1.5 leading-none">
+                        <label
+                          htmlFor="sports"
+                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                        >
+                          Sports Period
+                        </label>
+                        <p className="text-sm text-muted-foreground">
+                          1 period per week for sports activities
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start space-x-3">
+                      <Checkbox
+                        id="library"
+                        checked={specialPeriods.library}
+                        onCheckedChange={(checked) =>
+                          setSpecialPeriods({ ...specialPeriods, library: checked as boolean })
+                        }
+                      />
+                      <div className="grid gap-1.5 leading-none">
+                        <label
+                          htmlFor="library"
+                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                        >
+                          Library Period
+                        </label>
+                        <p className="text-sm text-muted-foreground">
+                          1 period per week for library
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start space-x-3">
+                      <Checkbox
+                        id="training"
+                        checked={specialPeriods.training}
+                        onCheckedChange={(checked) =>
+                          setSpecialPeriods({ ...specialPeriods, training: checked as boolean })
+                        }
+                      />
+                      <div className="grid gap-1.5 leading-none">
+                        <label
+                          htmlFor="training"
+                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                        >
+                          Training Period
+                        </label>
+                        <p className="text-sm text-muted-foreground">
+                          Mon-Wed: Morning training (9:00-1:00), Thu-Sat: Afternoon training (1:45-4:30)
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -273,6 +395,16 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
           {currentStep === 3 && (
             <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
               <div className="space-y-4">
+                <div className="p-3 bg-muted rounded-lg">
+                  <p className="text-sm font-medium">
+                    Branch: <span className="text-primary">{branch}</span>
+                    {section && <span className="text-primary"> - {section}</span>}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Only faculty with subjects/labs assigned to this branch{section ? ' and section' : ''} will be shown
+                  </p>
+                </div>
+
                 <p className="text-sm text-muted-foreground">
                   Select faculty for {parseInt(theoryCount)} theory subject(s) and {parseInt(labCount)} lab subject(s)
                 </p>
@@ -280,28 +412,58 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
                 {parseInt(theoryCount) > 0 && (
                   <div className="space-y-3">
                     <h3 className="font-semibold">Theory Subjects</h3>
-                    {Array.from({ length: parseInt(theoryCount) }).map((_, index) => (
-                      <div key={`theory-${index}`} className="space-y-2">
-                        <Label htmlFor={`theory-faculty-${index}`}>
-                          Theory Subject {index + 1} - Faculty Name *
-                        </Label>
-                        <Input
-                          id={`theory-faculty-${index}`}
-                          placeholder="Enter faculty name"
-                          value={selectedFaculty[index] || ""}
-                          onChange={(e) => updateFacultySelection(index, e.target.value)}
-                          list="faculty-list"
-                        />
-                      </div>
-                    ))}
+                    {filteredTheoryFaculty.length === 0 && (
+                      <p className="text-sm text-amber-600 bg-amber-50 p-2 rounded">
+                        No faculty found with theory subjects for {branch}{section ? `-${section}` : ''}. 
+                        Please add faculty-subject mappings in Faculty-Subject Management.
+                      </p>
+                    )}
+                    {Array.from({ length: parseInt(theoryCount) }).map((_, index) => {
+                      const selectedName = selectedFaculty[index] || "";
+                      const subjectDetails = selectedName ? getFacultySubjectDetails(selectedName, false) : null;
+                      
+                      return (
+                        <div key={`theory-${index}`} className="space-y-2">
+                          <Label htmlFor={`theory-faculty-${index}`}>
+                            Theory Subject {index + 1} - Faculty Name *
+                          </Label>
+                          <Input
+                            id={`theory-faculty-${index}`}
+                            placeholder="Enter faculty name"
+                            value={selectedName}
+                            onChange={(e) => updateFacultySelection(index, e.target.value)}
+                            list={`theory-faculty-list-${index}`}
+                          />
+                          <datalist id={`theory-faculty-list-${index}`}>
+                            {filteredTheoryFaculty.map((mapping) => (
+                              <option key={mapping.facultyName} value={mapping.facultyName} />
+                            ))}
+                          </datalist>
+                          {subjectDetails && (
+                            <Badge variant="secondary" className="text-xs">
+                              {subjectDetails.code} - {subjectDetails.name}
+                            </Badge>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
                 {parseInt(labCount) > 0 && (
                   <div className="space-y-3">
                     <h3 className="font-semibold">Lab Subjects</h3>
+                    {filteredLabFaculty.length === 0 && (
+                      <p className="text-sm text-amber-600 bg-amber-50 p-2 rounded">
+                        No faculty found with lab subjects for {branch}{section ? `-${section}` : ''}. 
+                        Please add faculty-lab mappings in Faculty-Subject Management.
+                      </p>
+                    )}
                     {Array.from({ length: parseInt(labCount) }).map((_, index) => {
                       const actualIndex = parseInt(theoryCount) + index;
+                      const selectedName = selectedFaculty[actualIndex] || "";
+                      const subjectDetails = selectedName ? getFacultySubjectDetails(selectedName, true) : null;
+                      
                       return (
                         <div key={`lab-${index}`} className="space-y-2">
                           <Label htmlFor={`lab-faculty-${index}`}>
@@ -310,21 +472,25 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
                           <Input
                             id={`lab-faculty-${index}`}
                             placeholder="Enter faculty name"
-                            value={selectedFaculty[actualIndex] || ""}
+                            value={selectedName}
                             onChange={(e) => updateFacultySelection(actualIndex, e.target.value)}
-                            list="faculty-list"
+                            list={`lab-faculty-list-${index}`}
                           />
+                          <datalist id={`lab-faculty-list-${index}`}>
+                            {filteredLabFaculty.map((mapping) => (
+                              <option key={mapping.facultyName} value={mapping.facultyName} />
+                            ))}
+                          </datalist>
+                          {subjectDetails && (
+                            <Badge variant="outline" className="text-xs">
+                              {subjectDetails.code} - {subjectDetails.name}
+                            </Badge>
+                          )}
                         </div>
                       );
                     })}
                   </div>
                 )}
-
-                <datalist id="faculty-list">
-                  {facultyMappings.map((mapping) => (
-                    <option key={mapping.facultyName} value={mapping.facultyName} />
-                  ))}
-                </datalist>
               </div>
 
               <div className="flex gap-2">

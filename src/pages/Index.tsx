@@ -31,7 +31,7 @@ const Index = () => {
   const handleConfigComplete = (config: ConfigData) => {
     try {
       const allSubjects = [...config.subjects, ...config.labs];
-      const entries = generateTimetable(allSubjects, config.labs, config.faculty);
+      const entries = generateTimetable(config.subjects, config.labs, config.faculty, config.specialPeriods);
 
       const newTimetable: SavedTimetable = {
         id: `tt-${Date.now()}`,

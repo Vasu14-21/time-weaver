@@ -15,11 +15,15 @@ export interface FacultySubjectMapping {
     id: string;
     name: string;
     code: string;
+    branch?: string;
+    section?: string;
   }>;
   labs: Array<{
     id: string;
     name: string;
     code: string;
+    branch?: string;
+    section?: string;
   }>;
 }
 
@@ -28,8 +32,12 @@ const FacultyManagement = () => {
   const [newFacultyName, setNewFacultyName] = useState("");
   const [newSubjectName, setNewSubjectName] = useState("");
   const [newSubjectCode, setNewSubjectCode] = useState("");
+  const [newSubjectBranch, setNewSubjectBranch] = useState("");
+  const [newSubjectSection, setNewSubjectSection] = useState("");
   const [newLabName, setNewLabName] = useState("");
   const [newLabCode, setNewLabCode] = useState("");
+  const [newLabBranch, setNewLabBranch] = useState("");
+  const [newLabSection, setNewLabSection] = useState("");
   const [selectedFacultyId, setSelectedFacultyId] = useState<string | null>(null);
   const [addingType, setAddingType] = useState<'subject' | 'lab' | null>(null);
 
@@ -42,11 +50,18 @@ const FacultyManagement = () => {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // Migrate old data structure to new one with separate subjects and labs arrays
         const migrated = parsed.map((mapping: any) => ({
           ...mapping,
-          subjects: mapping.subjects || [],
-          labs: mapping.labs || [],
+          subjects: (mapping.subjects || []).map((s: any) => ({
+            ...s,
+            branch: s.branch || "",
+            section: s.section || "",
+          })),
+          labs: (mapping.labs || []).map((l: any) => ({
+            ...l,
+            branch: l.branch || "",
+            section: l.section || "",
+          })),
         }));
         setFacultyMappings(migrated);
       } catch (error) {
@@ -85,6 +100,10 @@ const FacultyManagement = () => {
         toast.error("Please enter both subject name and code");
         return;
       }
+      if (!newSubjectBranch.trim()) {
+        toast.error("Please enter branch name");
+        return;
+      }
 
       const updated = facultyMappings.map((mapping) => {
         if (mapping.id === facultyId) {
@@ -92,6 +111,8 @@ const FacultyManagement = () => {
             id: `subject-${Date.now()}`,
             name: newSubjectName.trim(),
             code: newSubjectCode.trim(),
+            branch: newSubjectBranch.trim().toUpperCase(),
+            section: newSubjectSection.trim().toUpperCase(),
           };
 
           return {
@@ -108,6 +129,10 @@ const FacultyManagement = () => {
         toast.error("Please enter both lab name and code");
         return;
       }
+      if (!newLabBranch.trim()) {
+        toast.error("Please enter branch name");
+        return;
+      }
 
       const updated = facultyMappings.map((mapping) => {
         if (mapping.id === facultyId) {
@@ -115,6 +140,8 @@ const FacultyManagement = () => {
             id: `lab-${Date.now()}`,
             name: newLabName.trim(),
             code: newLabCode.trim(),
+            branch: newLabBranch.trim().toUpperCase(),
+            section: newLabSection.trim().toUpperCase(),
           };
 
           return {
@@ -130,8 +157,12 @@ const FacultyManagement = () => {
 
     setNewSubjectName("");
     setNewSubjectCode("");
+    setNewSubjectBranch("");
+    setNewSubjectSection("");
     setNewLabName("");
     setNewLabCode("");
+    setNewLabBranch("");
+    setNewLabSection("");
     setSelectedFacultyId(null);
     setAddingType(null);
   };
@@ -179,7 +210,7 @@ const FacultyManagement = () => {
             <h1 className="text-4xl font-bold text-foreground">Faculty-Subject Management</h1>
           </div>
           <p className="text-muted-foreground">
-            Manage faculty members and their teaching subjects. These mappings will be used for automatic faculty assignment during timetable generation.
+            Manage faculty members and their teaching subjects with branch and section assignments. These mappings will be used for automatic faculty assignment during timetable generation.
           </p>
         </div>
 
@@ -253,6 +284,11 @@ const FacultyManagement = () => {
                             <span className="font-semibold">{subject.code}</span>
                             <span>-</span>
                             <span>{subject.name}</span>
+                            {subject.branch && (
+                              <span className="text-xs opacity-70">
+                                [{subject.branch}{subject.section ? `-${subject.section}` : ''}]
+                              </span>
+                            )}
                             <button
                               onClick={() => removeSubject(mapping.id, subject.id)}
                               className="ml-1 hover:text-destructive"
@@ -276,6 +312,11 @@ const FacultyManagement = () => {
                             <span className="font-semibold">{lab.code}</span>
                             <span>-</span>
                             <span>{lab.name}</span>
+                            {lab.branch && (
+                              <span className="text-xs opacity-70">
+                                [{lab.branch}{lab.section ? `-${lab.section}` : ''}]
+                              </span>
+                            )}
                             <button
                               onClick={() => removeLab(mapping.id, lab.id)}
                               className="ml-1 hover:text-destructive"
@@ -299,7 +340,7 @@ const FacultyManagement = () => {
                           <h4 className="font-semibold">Add Theory Subject</h4>
                           <div className="grid grid-cols-2 gap-4">
                             <div>
-                              <Label htmlFor={`subjectCode-${mapping.id}`}>Subject Code</Label>
+                              <Label htmlFor={`subjectCode-${mapping.id}`}>Subject Code *</Label>
                               <Input
                                 id={`subjectCode-${mapping.id}`}
                                 value={newSubjectCode}
@@ -308,12 +349,30 @@ const FacultyManagement = () => {
                               />
                             </div>
                             <div>
-                              <Label htmlFor={`subjectName-${mapping.id}`}>Subject Name</Label>
+                              <Label htmlFor={`subjectName-${mapping.id}`}>Subject Name *</Label>
                               <Input
                                 id={`subjectName-${mapping.id}`}
                                 value={newSubjectName}
                                 onChange={(e) => setNewSubjectName(e.target.value)}
                                 placeholder="e.g., Data Structures"
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor={`subjectBranch-${mapping.id}`}>Branch *</Label>
+                              <Input
+                                id={`subjectBranch-${mapping.id}`}
+                                value={newSubjectBranch}
+                                onChange={(e) => setNewSubjectBranch(e.target.value)}
+                                placeholder="e.g., CSE"
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor={`subjectSection-${mapping.id}`}>Section</Label>
+                              <Input
+                                id={`subjectSection-${mapping.id}`}
+                                value={newSubjectSection}
+                                onChange={(e) => setNewSubjectSection(e.target.value)}
+                                placeholder="e.g., A (optional)"
                                 onKeyDown={(e) => e.key === "Enter" && addSubjectToFaculty(mapping.id)}
                               />
                             </div>
@@ -326,7 +385,7 @@ const FacultyManagement = () => {
                           <h4 className="font-semibold">Add Lab Subject (3-hour block)</h4>
                           <div className="grid grid-cols-2 gap-4">
                             <div>
-                              <Label htmlFor={`labCode-${mapping.id}`}>Lab Code</Label>
+                              <Label htmlFor={`labCode-${mapping.id}`}>Lab Code *</Label>
                               <Input
                                 id={`labCode-${mapping.id}`}
                                 value={newLabCode}
@@ -335,12 +394,30 @@ const FacultyManagement = () => {
                               />
                             </div>
                             <div>
-                              <Label htmlFor={`labName-${mapping.id}`}>Lab Name</Label>
+                              <Label htmlFor={`labName-${mapping.id}`}>Lab Name *</Label>
                               <Input
                                 id={`labName-${mapping.id}`}
                                 value={newLabName}
                                 onChange={(e) => setNewLabName(e.target.value)}
                                 placeholder="e.g., Data Structures Lab"
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor={`labBranch-${mapping.id}`}>Branch *</Label>
+                              <Input
+                                id={`labBranch-${mapping.id}`}
+                                value={newLabBranch}
+                                onChange={(e) => setNewLabBranch(e.target.value)}
+                                placeholder="e.g., CSE"
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor={`labSection-${mapping.id}`}>Section</Label>
+                              <Input
+                                id={`labSection-${mapping.id}`}
+                                value={newLabSection}
+                                onChange={(e) => setNewLabSection(e.target.value)}
+                                placeholder="e.g., A (optional)"
                                 onKeyDown={(e) => e.key === "Enter" && addSubjectToFaculty(mapping.id)}
                               />
                             </div>
@@ -359,8 +436,12 @@ const FacultyManagement = () => {
                             setAddingType(null);
                             setNewSubjectName("");
                             setNewSubjectCode("");
+                            setNewSubjectBranch("");
+                            setNewSubjectSection("");
                             setNewLabName("");
                             setNewLabCode("");
+                            setNewLabBranch("");
+                            setNewLabSection("");
                           }}
                           variant="outline"
                           size="sm"
