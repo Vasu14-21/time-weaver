@@ -218,6 +218,32 @@ export function TimetableDisplay({
                         );
                       }
 
+                      // Handle special periods
+                      if (entry.isSpecial) {
+                        let bgClass = "bg-amber-100 text-amber-800";
+                        let label = "";
+                        
+                        if (entry.specialType === "sports") {
+                          bgClass = "bg-green-100 text-green-800";
+                          label = "SPORTS";
+                        } else if (entry.specialType === "library") {
+                          bgClass = "bg-purple-100 text-purple-800";
+                          label = "LIBRARY";
+                        } else if (entry.specialType === "training") {
+                          bgClass = "bg-orange-100 text-orange-800";
+                          label = "TRAINING";
+                        }
+
+                        return (
+                          <td
+                            key={idx}
+                            className={`border border-border p-2 text-center ${bgClass}`}
+                          >
+                            <div className="text-sm font-semibold">{label}</div>
+                          </td>
+                        );
+                      }
+
                       const isLab = entry.isLab;
                       const bgClass = isLab
                         ? "bg-lab text-lab-foreground"
@@ -249,7 +275,7 @@ export function TimetableDisplay({
             </table>
           </div>
 
-          <div className="mt-6 flex gap-4 items-center justify-center text-sm">
+          <div className="mt-6 flex flex-wrap gap-4 items-center justify-center text-sm">
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 bg-subject rounded"></div>
               <span>Subject</span>
@@ -261,6 +287,18 @@ export function TimetableDisplay({
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 bg-break border border-border rounded"></div>
               <span>Break</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-green-100 border border-green-300 rounded"></div>
+              <span>Sports</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-purple-100 border border-purple-300 rounded"></div>
+              <span>Library</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-orange-100 border border-orange-300 rounded"></div>
+              <span>Training</span>
             </div>
           </div>
         </CardContent>

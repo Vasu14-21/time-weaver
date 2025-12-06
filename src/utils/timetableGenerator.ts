@@ -1,4 +1,4 @@
-import { TimeSlot, TimetableEntry, Subject, Faculty } from "@/types/timetable";
+import { TimeSlot, TimetableEntry, Subject, Faculty, SpecialPeriods } from "@/types/timetable";
 
 export const DAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
@@ -21,6 +21,14 @@ export const LAB_SLOTS = {
   afternoon: [7, 8, 9],
 };
 
+// Training slots
+export const TRAINING_SLOTS = {
+  morningDays: ["MON", "TUE", "WED"], // Morning training days
+  afternoonDays: ["THU", "FRI", "SAT"], // Afternoon training days
+  morningPeriods: [1, 2, 4, 5], // 9:00 - 1:00 (excluding breaks)
+  afternoonPeriods: [7, 8, 9], // 1:45 - 4:30
+};
+
 interface FacultyAllocation {
   facultyId: string;
   day: string;
@@ -30,10 +38,143 @@ interface FacultyAllocation {
 export function generateTimetable(
   subjects: Subject[],
   labs: Subject[],
-  faculty: Faculty[]
+  faculty: Faculty[],
+  specialPeriods?: SpecialPeriods
 ): TimetableEntry[] {
   const entries: TimetableEntry[] = [];
   const facultyAllocations: FacultyAllocation[] = [];
+
+  // Track which slots are blocked by special periods
+  const blockedSlots: Set<string> = new Set();
+
+  // First, allocate training periods if enabled
+  if (specialPeriods?.training) {
+    // Morning training: Mon-Wed, 9:00-1:00
+    TRAINING_SLOTS.morningDays.forEach((day) => {
+      TRAINING_SLOTS.morningPeriods.forEach((period) => {
+        entries.push({
+          day,
+          period,
+          subjectId: "training",
+          facultyId: "training",
+          isLab: false,
+          isSpecial: true,
+          specialType: "training",
+        });
+        blockedSlots.add(`${day}-${period}`);
+      });
+    });
+
+    // Afternoon training: Thu-Sat, 1:45-4:30
+    TRAINING_SLOTS.afternoonDays.forEach((day) => {
+      TRAINING_SLOTS.afternoonPeriods.forEach((period) => {
+        entries.push({
+          day,
+          period,
+          subjectId: "training",
+          facultyId: "training",
+          isLab: false,
+          isSpecial: true,
+          specialType: "training",
+        });
+        blockedSlots.add(`${day}-${period}`);
+      });
+    });
+  }
+
+  // Allocate sports period (1 period per week)
+  if (specialPeriods?.sports) {
+    const availableDays = DAYS.filter((day) => {
+      // For training mode, only check non-training slots
+      if (specialPeriods.training) {
+        if (TRAINING_SLOTS.morningDays.includes(day)) {
+          // Afternoon is available
+          return true;
+        } else {
+          // Morning is available
+          return true;
+        }
+      }
+      return true;
+    });
+
+    const randomDay = availableDays[Math.floor(Math.random() * availableDays.length)];
+    let randomPeriod: number;
+
+    if (specialPeriods.training) {
+      if (TRAINING_SLOTS.morningDays.includes(randomDay)) {
+        // Afternoon available: pick from 7,8,9
+        const availablePeriods = [7, 8, 9];
+        randomPeriod = availablePeriods[Math.floor(Math.random() * availablePeriods.length)];
+      } else {
+        // Morning available: pick from 1,2,4,5
+        const availablePeriods = [1, 2, 4, 5];
+        randomPeriod = availablePeriods[Math.floor(Math.random() * availablePeriods.length)];
+      }
+    } else {
+      const regularPeriods = [1, 2, 4, 5, 7, 8, 9];
+      randomPeriod = regularPeriods[Math.floor(Math.random() * regularPeriods.length)];
+    }
+
+    if (!blockedSlots.has(`${randomDay}-${randomPeriod}`)) {
+      entries.push({
+        day: randomDay,
+        period: randomPeriod,
+        subjectId: "sports",
+        facultyId: "sports",
+        isLab: false,
+        isSpecial: true,
+        specialType: "sports",
+      });
+      blockedSlots.add(`${randomDay}-${randomPeriod}`);
+    }
+  }
+
+  // Allocate library period (1 period per week)
+  if (specialPeriods?.library) {
+    const availableDays = DAYS.filter((day) => {
+      if (specialPeriods.training) {
+        return true; // Some slots will be available
+      }
+      return true;
+    });
+
+    let placed = false;
+    let attempts = 0;
+
+    while (!placed && attempts < 50) {
+      const randomDay = availableDays[Math.floor(Math.random() * availableDays.length)];
+      let randomPeriod: number;
+
+      if (specialPeriods.training) {
+        if (TRAINING_SLOTS.morningDays.includes(randomDay)) {
+          const availablePeriods = [7, 8, 9];
+          randomPeriod = availablePeriods[Math.floor(Math.random() * availablePeriods.length)];
+        } else {
+          const availablePeriods = [1, 2, 4, 5];
+          randomPeriod = availablePeriods[Math.floor(Math.random() * availablePeriods.length)];
+        }
+      } else {
+        const regularPeriods = [1, 2, 4, 5, 7, 8, 9];
+        randomPeriod = regularPeriods[Math.floor(Math.random() * regularPeriods.length)];
+      }
+
+      if (!blockedSlots.has(`${randomDay}-${randomPeriod}`)) {
+        entries.push({
+          day: randomDay,
+          period: randomPeriod,
+          subjectId: "library",
+          facultyId: "library",
+          isLab: false,
+          isSpecial: true,
+          specialType: "library",
+        });
+        blockedSlots.add(`${randomDay}-${randomPeriod}`);
+        placed = true;
+      }
+      attempts++;
+    }
+  }
 
   // Shuffle for randomness
   const shuffledSubjects = [...subjects].sort(() => Math.random() - 0.5);
@@ -59,19 +200,46 @@ export function generateTimetable(
   );
 
   // First, allocate labs (they need 3 consecutive periods)
-  const availableLabDays = [...DAYS];
-  
+  const availableLabDays = DAYS.filter((day) => {
+    // Check if both morning or afternoon slots are fully blocked
+    const morningBlocked = LAB_SLOTS.morning.every((p) => blockedSlots.has(`${day}-${p}`));
+    const afternoonBlocked = LAB_SLOTS.afternoon.every((p) => blockedSlots.has(`${day}-${p}`));
+    return !morningBlocked || !afternoonBlocked;
+  });
+
+  const usedLabDays: string[] = [];
+
   for (const lab of shuffledLabsWithFaculty) {
-    if (availableLabDays.length === 0) break;
+    const remainingDays = availableLabDays.filter((d) => !usedLabDays.includes(d));
+    if (remainingDays.length === 0) break;
 
-    // Randomly choose morning or afternoon slot
-    const isAfternoon = Math.random() > 0.5;
-    const periods = isAfternoon ? LAB_SLOTS.afternoon : LAB_SLOTS.morning;
+    // Try to find a day with available lab slots
+    let assignedDay: string | null = null;
+    let periods: number[] = [];
 
-    // Pick a random available day
-    const dayIndex = Math.floor(Math.random() * availableLabDays.length);
-    const day = availableLabDays[dayIndex];
-    availableLabDays.splice(dayIndex, 1); // Remove to ensure different days for labs
+    for (const day of remainingDays.sort(() => Math.random() - 0.5)) {
+      // Check morning slots
+      const morningAvailable = LAB_SLOTS.morning.every((p) => !blockedSlots.has(`${day}-${p}`));
+      // Check afternoon slots
+      const afternoonAvailable = LAB_SLOTS.afternoon.every((p) => !blockedSlots.has(`${day}-${p}`));
+
+      if (morningAvailable && afternoonAvailable) {
+        assignedDay = day;
+        periods = Math.random() > 0.5 ? LAB_SLOTS.afternoon : LAB_SLOTS.morning;
+        break;
+      } else if (morningAvailable) {
+        assignedDay = day;
+        periods = LAB_SLOTS.morning;
+        break;
+      } else if (afternoonAvailable) {
+        assignedDay = day;
+        periods = LAB_SLOTS.afternoon;
+        break;
+      }
+    }
+
+    if (!assignedDay) continue;
+    usedLabDays.push(assignedDay);
 
     const possibleFaculty = subjectFacultyMap[lab.id] || [];
     if (possibleFaculty.length === 0) continue;
@@ -86,7 +254,7 @@ export function generateTimetable(
       const isFacultyBusy = facultyAllocations.some(
         (allocation) =>
           allocation.facultyId === candidateFaculty.id &&
-          allocation.day === day &&
+          allocation.day === assignedDay &&
           allocation.periods.some((p) => periods.includes(p))
       );
 
@@ -103,18 +271,19 @@ export function generateTimetable(
     // Add lab entries for all 3 periods
     periods.forEach((period) => {
       entries.push({
-        day,
+        day: assignedDay!,
         period,
         subjectId: lab.id,
         facultyId: assignedFaculty!.id,
         isLab: true,
       });
+      blockedSlots.add(`${assignedDay}-${period}`);
     });
 
     // Mark faculty as allocated
     facultyAllocations.push({
       facultyId: assignedFaculty.id,
-      day,
+      day: assignedDay,
       periods,
     });
   }
@@ -124,11 +293,8 @@ export function generateTimetable(
 
   for (const day of DAYS) {
     for (const period of regularPeriods) {
-      // Skip if already allocated (by lab)
-      const isAllocated = entries.some(
-        (e) => e.day === day && e.period === period
-      );
-      if (isAllocated) continue;
+      // Skip if already allocated
+      if (blockedSlots.has(`${day}-${period}`)) continue;
 
       // Try to find a subject and its assigned faculty for this slot
       let attempts = 0;
@@ -199,6 +365,7 @@ export function generateTimetable(
 
   return entries;
 }
+
 export function validateFacultyConflict(
   entries: TimetableEntry[],
   newEntry: TimetableEntry
