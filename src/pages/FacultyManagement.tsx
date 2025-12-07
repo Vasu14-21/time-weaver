@@ -17,6 +17,7 @@ export interface FacultySubjectMapping {
     code: string;
     branch?: string;
     section?: string;
+    year?: string;
   }>;
   labs: Array<{
     id: string;
@@ -24,8 +25,11 @@ export interface FacultySubjectMapping {
     code: string;
     branch?: string;
     section?: string;
+    year?: string;
   }>;
 }
+
+const YEARS = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
 
 const FacultyManagement = () => {
   const [facultyMappings, setFacultyMappings] = useState<FacultySubjectMapping[]>([]);
@@ -34,10 +38,12 @@ const FacultyManagement = () => {
   const [newSubjectCode, setNewSubjectCode] = useState("");
   const [newSubjectBranch, setNewSubjectBranch] = useState("");
   const [newSubjectSection, setNewSubjectSection] = useState("");
+  const [newSubjectYear, setNewSubjectYear] = useState("");
   const [newLabName, setNewLabName] = useState("");
   const [newLabCode, setNewLabCode] = useState("");
   const [newLabBranch, setNewLabBranch] = useState("");
   const [newLabSection, setNewLabSection] = useState("");
+  const [newLabYear, setNewLabYear] = useState("");
   const [selectedFacultyId, setSelectedFacultyId] = useState<string | null>(null);
   const [addingType, setAddingType] = useState<'subject' | 'lab' | null>(null);
 
@@ -56,11 +62,13 @@ const FacultyManagement = () => {
             ...s,
             branch: s.branch || "",
             section: s.section || "",
+            year: s.year || "",
           })),
           labs: (mapping.labs || []).map((l: any) => ({
             ...l,
             branch: l.branch || "",
             section: l.section || "",
+            year: l.year || "",
           })),
         }));
         setFacultyMappings(migrated);
@@ -104,6 +112,10 @@ const FacultyManagement = () => {
         toast.error("Please enter branch name");
         return;
       }
+      if (!newSubjectYear.trim()) {
+        toast.error("Please select year");
+        return;
+      }
 
       const updated = facultyMappings.map((mapping) => {
         if (mapping.id === facultyId) {
@@ -113,6 +125,7 @@ const FacultyManagement = () => {
             code: newSubjectCode.trim(),
             branch: newSubjectBranch.trim().toUpperCase(),
             section: newSubjectSection.trim().toUpperCase(),
+            year: newSubjectYear,
           };
 
           return {
@@ -133,6 +146,10 @@ const FacultyManagement = () => {
         toast.error("Please enter branch name");
         return;
       }
+      if (!newLabYear.trim()) {
+        toast.error("Please select year");
+        return;
+      }
 
       const updated = facultyMappings.map((mapping) => {
         if (mapping.id === facultyId) {
@@ -142,6 +159,7 @@ const FacultyManagement = () => {
             code: newLabCode.trim(),
             branch: newLabBranch.trim().toUpperCase(),
             section: newLabSection.trim().toUpperCase(),
+            year: newLabYear,
           };
 
           return {
@@ -159,10 +177,12 @@ const FacultyManagement = () => {
     setNewSubjectCode("");
     setNewSubjectBranch("");
     setNewSubjectSection("");
+    setNewSubjectYear("");
     setNewLabName("");
     setNewLabCode("");
     setNewLabBranch("");
     setNewLabSection("");
+    setNewLabYear("");
     setSelectedFacultyId(null);
     setAddingType(null);
   };
@@ -210,7 +230,7 @@ const FacultyManagement = () => {
             <h1 className="text-4xl font-bold text-foreground">Faculty-Subject Management</h1>
           </div>
           <p className="text-muted-foreground">
-            Manage faculty members and their teaching subjects with branch and section assignments. These mappings will be used for automatic faculty assignment during timetable generation.
+            Manage faculty members and their teaching subjects with year, branch and section assignments. These mappings will be used for automatic faculty assignment during timetable generation.
           </p>
         </div>
 
@@ -284,11 +304,10 @@ const FacultyManagement = () => {
                             <span className="font-semibold">{subject.code}</span>
                             <span>-</span>
                             <span>{subject.name}</span>
-                            {subject.branch && (
-                              <span className="text-xs opacity-70">
-                                [{subject.branch}{subject.section ? `-${subject.section}` : ''}]
-                              </span>
-                            )}
+                            <span className="text-xs opacity-70">
+                              [{subject.year?.replace(" Year", "") || "?"} | {subject.branch || "?"}
+                              {subject.section ? `-${subject.section}` : ''}]
+                            </span>
                             <button
                               onClick={() => removeSubject(mapping.id, subject.id)}
                               className="ml-1 hover:text-destructive"
@@ -312,11 +331,10 @@ const FacultyManagement = () => {
                             <span className="font-semibold">{lab.code}</span>
                             <span>-</span>
                             <span>{lab.name}</span>
-                            {lab.branch && (
-                              <span className="text-xs opacity-70">
-                                [{lab.branch}{lab.section ? `-${lab.section}` : ''}]
-                              </span>
-                            )}
+                            <span className="text-xs opacity-70">
+                              [{lab.year?.replace(" Year", "") || "?"} | {lab.branch || "?"}
+                              {lab.section ? `-${lab.section}` : ''}]
+                            </span>
                             <button
                               onClick={() => removeLab(mapping.id, lab.id)}
                               className="ml-1 hover:text-destructive"
@@ -358,6 +376,20 @@ const FacultyManagement = () => {
                               />
                             </div>
                             <div>
+                              <Label htmlFor={`subjectYear-${mapping.id}`}>Year *</Label>
+                              <select
+                                id={`subjectYear-${mapping.id}`}
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                                value={newSubjectYear}
+                                onChange={(e) => setNewSubjectYear(e.target.value)}
+                              >
+                                <option value="">Select Year</option>
+                                {YEARS.map((y) => (
+                                  <option key={y} value={y}>{y}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
                               <Label htmlFor={`subjectBranch-${mapping.id}`}>Branch *</Label>
                               <Input
                                 id={`subjectBranch-${mapping.id}`}
@@ -366,7 +398,7 @@ const FacultyManagement = () => {
                                 placeholder="e.g., CSE"
                               />
                             </div>
-                            <div>
+                            <div className="col-span-2">
                               <Label htmlFor={`subjectSection-${mapping.id}`}>Section</Label>
                               <Input
                                 id={`subjectSection-${mapping.id}`}
@@ -403,6 +435,20 @@ const FacultyManagement = () => {
                               />
                             </div>
                             <div>
+                              <Label htmlFor={`labYear-${mapping.id}`}>Year *</Label>
+                              <select
+                                id={`labYear-${mapping.id}`}
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                                value={newLabYear}
+                                onChange={(e) => setNewLabYear(e.target.value)}
+                              >
+                                <option value="">Select Year</option>
+                                {YEARS.map((y) => (
+                                  <option key={y} value={y}>{y}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
                               <Label htmlFor={`labBranch-${mapping.id}`}>Branch *</Label>
                               <Input
                                 id={`labBranch-${mapping.id}`}
@@ -411,7 +457,7 @@ const FacultyManagement = () => {
                                 placeholder="e.g., CSE"
                               />
                             </div>
-                            <div>
+                            <div className="col-span-2">
                               <Label htmlFor={`labSection-${mapping.id}`}>Section</Label>
                               <Input
                                 id={`labSection-${mapping.id}`}
@@ -438,10 +484,12 @@ const FacultyManagement = () => {
                             setNewSubjectCode("");
                             setNewSubjectBranch("");
                             setNewSubjectSection("");
+                            setNewSubjectYear("");
                             setNewLabName("");
                             setNewLabCode("");
                             setNewLabBranch("");
                             setNewLabSection("");
+                            setNewLabYear("");
                           }}
                           variant="outline"
                           size="sm"

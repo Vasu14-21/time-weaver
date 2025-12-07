@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ConfigData, Faculty, Subject, SpecialPeriods } from "@/types/timetable";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { FacultySubjectMapping } from "@/pages/FacultyManagement";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +27,7 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
   const [theoryCount, setTheoryCount] = useState("");
   const [labCount, setLabCount] = useState("");
   const [selectedFaculty, setSelectedFaculty] = useState<string[]>([]);
+  const [facultyErrors, setFacultyErrors] = useState<string[]>([]);
 
   // Special periods state
   const [specialPeriods, setSpecialPeriods] = useState<SpecialPeriods>({
@@ -60,29 +61,20 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
 
   const handleStep2Next = () => {
     const theory = parseInt(theoryCount);
-    const lab = parseInt(labCount);
+    const lab = parseInt(labCount) || 0;
     
     if (isNaN(theory) || theory < 1) {
       toast.error("Please enter a valid theory subject count (minimum 1)");
       return;
     }
-    if (isNaN(lab) || lab < 0) {
-      toast.error("Please enter a valid lab subject count (0 or more)");
-      return;
-    }
     
     const totalCount = theory + lab;
     setSelectedFaculty(new Array(totalCount).fill(""));
+    setFacultyErrors(new Array(totalCount).fill(""));
     setCurrentStep(3);
   };
 
-  const updateFacultySelection = (index: number, facultyName: string) => {
-    const updated = [...selectedFaculty];
-    updated[index] = facultyName;
-    setSelectedFaculty(updated);
-  };
-
-  // Get filtered faculty list based on branch and section
+  // Get filtered faculty list based on year, branch and section
   const getFilteredFacultyForSubject = (isLab: boolean) => {
     const branchUpper = branch.toUpperCase();
     const sectionUpper = section.toUpperCase();
@@ -92,6 +84,10 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
       return items.some((item) => {
         const itemBranch = (item.branch || "").toUpperCase();
         const itemSection = (item.section || "").toUpperCase();
+        const itemYear = item.year || "";
+        
+        // Match year
+        if (itemYear && itemYear !== year) return false;
         
         // Match branch
         if (itemBranch !== branchUpper) return false;
@@ -104,18 +100,54 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
     });
   };
 
-  // Get subject/lab details for a faculty based on branch/section
+  // Check if a faculty has valid subjects for this branch/year
+  const isFacultyValidForBranch = (facultyName: string, isLab: boolean): boolean => {
+    const branchUpper = branch.toUpperCase();
+    const sectionUpper = section.toUpperCase();
+
+    const mapping = facultyMappings.find(m => 
+      m.facultyName.toLowerCase() === facultyName.toLowerCase()
+    );
+    
+    if (!mapping) return false;
+
+    const items = isLab ? (mapping.labs || []) : (mapping.subjects || []);
+    return items.some((item) => {
+      const itemBranch = (item.branch || "").toUpperCase();
+      const itemSection = (item.section || "").toUpperCase();
+      const itemYear = item.year || "";
+      
+      // Match year
+      if (itemYear && itemYear !== year) return false;
+      
+      // Match branch
+      if (itemBranch !== branchUpper) return false;
+      
+      // If section is provided, match it
+      if (sectionUpper && itemSection && itemSection !== sectionUpper) return false;
+      
+      return true;
+    });
+  };
+
+  // Get subject/lab details for a faculty based on year/branch/section
   const getFacultySubjectDetails = (facultyName: string, isLab: boolean) => {
     const branchUpper = branch.toUpperCase();
     const sectionUpper = section.toUpperCase();
 
-    const mapping = facultyMappings.find(m => m.facultyName === facultyName);
+    const mapping = facultyMappings.find(m => 
+      m.facultyName.toLowerCase() === facultyName.toLowerCase()
+    );
     if (!mapping) return null;
 
     const items = isLab ? (mapping.labs || []) : (mapping.subjects || []);
     const matchedItem = items.find((item) => {
       const itemBranch = (item.branch || "").toUpperCase();
       const itemSection = (item.section || "").toUpperCase();
+      const itemYear = item.year || "";
+      
+      // Match year
+      if (itemYear && itemYear !== year) return false;
       
       if (itemBranch !== branchUpper) return false;
       if (sectionUpper && itemSection && itemSection !== sectionUpper) return false;
@@ -126,18 +158,57 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
     return matchedItem;
   };
 
+  const updateFacultySelection = (index: number, facultyName: string) => {
+    const theory = parseInt(theoryCount);
+    const isLab = index >= theory;
+    
+    // Validate faculty immediately
+    const newErrors = [...facultyErrors];
+    
+    if (facultyName.trim()) {
+      const isValid = isFacultyValidForBranch(facultyName, isLab);
+      if (!isValid) {
+        newErrors[index] = `"${facultyName}" has no ${isLab ? 'labs' : 'subjects'} for ${year} ${branch}${section ? `-${section}` : ''}`;
+        toast.error(`Invalid faculty: "${facultyName}" has no ${isLab ? 'labs' : 'subjects'} assigned for ${year} ${branch}${section ? `-${section}` : ''}`);
+        // Clear the invalid faculty name
+        const updated = [...selectedFaculty];
+        updated[index] = "";
+        setSelectedFaculty(updated);
+        setFacultyErrors(newErrors);
+        return;
+      } else {
+        newErrors[index] = "";
+      }
+    } else {
+      newErrors[index] = "";
+    }
+    
+    const updated = [...selectedFaculty];
+    updated[index] = facultyName;
+    setSelectedFaculty(updated);
+    setFacultyErrors(newErrors);
+  };
+
   const handleStep3Next = () => {
     const emptyCount = selectedFaculty.filter(f => !f.trim()).length;
     if (emptyCount > 0) {
       toast.error(`Please select all ${selectedFaculty.length} faculty members`);
       return;
     }
+    
+    // Check for any validation errors
+    const hasErrors = facultyErrors.some(e => e);
+    if (hasErrors) {
+      toast.error("Please fix faculty validation errors before proceeding");
+      return;
+    }
+    
     generateAndComplete();
   };
 
   const generateAndComplete = () => {
     const theory = parseInt(theoryCount);
-    const lab = parseInt(labCount);
+    const lab = parseInt(labCount) || 0;
     
     const subjectsList: Subject[] = [];
     const labsList: Subject[] = [];
@@ -227,7 +298,7 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
           <CardDescription>
             {currentStep === 1 && "Enter year, branch and section information"}
             {currentStep === 2 && "Enter subject counts and special periods"}
-            {currentStep === 3 && `Select faculty members for ${branch}${section ? `-${section}` : ''}`}
+            {currentStep === 3 && `Select faculty members for ${year} ${branch}${section ? `-${section}` : ''}`}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -293,17 +364,17 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
                   <p className="text-sm text-muted-foreground">Minimum: 1 subject</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="labCount">Number of Lab Subjects *</Label>
+                  <Label htmlFor="labCount">Number of Lab Subjects</Label>
                   <Input
                     id="labCount"
                     type="number"
                     min="0"
-                    placeholder="e.g., 2"
+                    placeholder="e.g., 2 (optional - leave empty to skip)"
                     value={labCount}
                     onChange={(e) => setLabCount(e.target.value)}
                     onKeyDown={(e) => handleKeyDown(e)}
                   />
-                  <p className="text-sm text-muted-foreground">Optional: Enter 0 to skip labs</p>
+                  <p className="text-sm text-muted-foreground">Optional: Leave empty or enter 0 to skip labs</p>
                 </div>
 
                 {/* Special Periods */}
@@ -397,16 +468,17 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
               <div className="space-y-4">
                 <div className="p-3 bg-muted rounded-lg">
                   <p className="text-sm font-medium">
+                    Year: <span className="text-primary">{year}</span> | 
                     Branch: <span className="text-primary">{branch}</span>
                     {section && <span className="text-primary"> - {section}</span>}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Only faculty with subjects/labs assigned to this branch{section ? ' and section' : ''} will be shown
+                    Only faculty with subjects/labs assigned to this year, branch{section ? ' and section' : ''} will be shown
                   </p>
                 </div>
 
                 <p className="text-sm text-muted-foreground">
-                  Select faculty for {parseInt(theoryCount)} theory subject(s) and {parseInt(labCount)} lab subject(s)
+                  Select faculty for {parseInt(theoryCount)} theory subject(s){parseInt(labCount) > 0 ? ` and ${parseInt(labCount)} lab subject(s)` : ''}
                 </p>
                 
                 {parseInt(theoryCount) > 0 && (
@@ -414,13 +486,14 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
                     <h3 className="font-semibold">Theory Subjects</h3>
                     {filteredTheoryFaculty.length === 0 && (
                       <p className="text-sm text-amber-600 bg-amber-50 p-2 rounded">
-                        No faculty found with theory subjects for {branch}{section ? `-${section}` : ''}. 
+                        No faculty found with theory subjects for {year} {branch}{section ? `-${section}` : ''}. 
                         Please add faculty-subject mappings in Faculty-Subject Management.
                       </p>
                     )}
                     {Array.from({ length: parseInt(theoryCount) }).map((_, index) => {
                       const selectedName = selectedFaculty[index] || "";
                       const subjectDetails = selectedName ? getFacultySubjectDetails(selectedName, false) : null;
+                      const hasError = facultyErrors[index];
                       
                       return (
                         <div key={`theory-${index}`} className="space-y-2">
@@ -432,14 +505,26 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
                             placeholder="Enter faculty name"
                             value={selectedName}
                             onChange={(e) => updateFacultySelection(index, e.target.value)}
+                            onBlur={(e) => {
+                              if (e.target.value.trim() && !isFacultyValidForBranch(e.target.value, false)) {
+                                updateFacultySelection(index, e.target.value);
+                              }
+                            }}
                             list={`theory-faculty-list-${index}`}
+                            className={hasError ? "border-destructive" : ""}
                           />
                           <datalist id={`theory-faculty-list-${index}`}>
                             {filteredTheoryFaculty.map((mapping) => (
                               <option key={mapping.facultyName} value={mapping.facultyName} />
                             ))}
                           </datalist>
-                          {subjectDetails && (
+                          {hasError && (
+                            <p className="text-xs text-destructive flex items-center gap-1">
+                              <AlertCircle className="h-3 w-3" />
+                              {hasError}
+                            </p>
+                          )}
+                          {subjectDetails && !hasError && (
                             <Badge variant="secondary" className="text-xs">
                               {subjectDetails.code} - {subjectDetails.name}
                             </Badge>
@@ -450,19 +535,20 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
                   </div>
                 )}
 
-                {parseInt(labCount) > 0 && (
+                {(parseInt(labCount) || 0) > 0 && (
                   <div className="space-y-3">
                     <h3 className="font-semibold">Lab Subjects</h3>
                     {filteredLabFaculty.length === 0 && (
                       <p className="text-sm text-amber-600 bg-amber-50 p-2 rounded">
-                        No faculty found with lab subjects for {branch}{section ? `-${section}` : ''}. 
+                        No faculty found with lab subjects for {year} {branch}{section ? `-${section}` : ''}. 
                         Please add faculty-lab mappings in Faculty-Subject Management.
                       </p>
                     )}
-                    {Array.from({ length: parseInt(labCount) }).map((_, index) => {
+                    {Array.from({ length: parseInt(labCount) || 0 }).map((_, index) => {
                       const actualIndex = parseInt(theoryCount) + index;
                       const selectedName = selectedFaculty[actualIndex] || "";
                       const subjectDetails = selectedName ? getFacultySubjectDetails(selectedName, true) : null;
+                      const hasError = facultyErrors[actualIndex];
                       
                       return (
                         <div key={`lab-${index}`} className="space-y-2">
@@ -474,14 +560,26 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
                             placeholder="Enter faculty name"
                             value={selectedName}
                             onChange={(e) => updateFacultySelection(actualIndex, e.target.value)}
+                            onBlur={(e) => {
+                              if (e.target.value.trim() && !isFacultyValidForBranch(e.target.value, true)) {
+                                updateFacultySelection(actualIndex, e.target.value);
+                              }
+                            }}
                             list={`lab-faculty-list-${index}`}
+                            className={hasError ? "border-destructive" : ""}
                           />
                           <datalist id={`lab-faculty-list-${index}`}>
                             {filteredLabFaculty.map((mapping) => (
                               <option key={mapping.facultyName} value={mapping.facultyName} />
                             ))}
                           </datalist>
-                          {subjectDetails && (
+                          {hasError && (
+                            <p className="text-xs text-destructive flex items-center gap-1">
+                              <AlertCircle className="h-3 w-3" />
+                              {hasError}
+                            </p>
+                          )}
+                          {subjectDetails && !hasError && (
                             <Badge variant="outline" className="text-xs">
                               {subjectDetails.code} - {subjectDetails.name}
                             </Badge>
