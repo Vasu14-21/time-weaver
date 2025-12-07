@@ -29,10 +29,23 @@ export const TRAINING_SLOTS = {
   afternoonPeriods: [7, 8, 9], // 1:45 - 4:30
 };
 
+// Faculty constraints
+const MAX_CLASSES_PER_WEEK = 7;
+const MAX_CLASSES_PER_DAY = 2;
+
 interface FacultyAllocation {
   facultyId: string;
   day: string;
   periods: number[];
+  isLab?: boolean;
+}
+
+interface FacultyWeeklyCount {
+  [facultyId: string]: {
+    totalClasses: number;
+    dailyClasses: { [day: string]: number };
+    labDays: string[]; // Days where faculty has a lab
+  };
 }
 
 export function generateTimetable(
@@ -43,6 +56,19 @@ export function generateTimetable(
 ): TimetableEntry[] {
   const entries: TimetableEntry[] = [];
   const facultyAllocations: FacultyAllocation[] = [];
+  const facultyWeeklyCount: FacultyWeeklyCount = {};
+
+  // Initialize faculty weekly count
+  faculty.forEach((f) => {
+    facultyWeeklyCount[f.id] = {
+      totalClasses: 0,
+      dailyClasses: {},
+      labDays: [],
+    };
+    DAYS.forEach((day) => {
+      facultyWeeklyCount[f.id].dailyClasses[day] = 0;
+    });
+  });
 
   // Track which slots are blocked by special periods
   const blockedSlots: Set<string> = new Set();
@@ -85,13 +111,10 @@ export function generateTimetable(
   // Allocate sports period (1 period per week)
   if (specialPeriods?.sports) {
     const availableDays = DAYS.filter((day) => {
-      // For training mode, only check non-training slots
       if (specialPeriods.training) {
         if (TRAINING_SLOTS.morningDays.includes(day)) {
-          // Afternoon is available
           return true;
         } else {
-          // Morning is available
           return true;
         }
       }
@@ -103,11 +126,9 @@ export function generateTimetable(
 
     if (specialPeriods.training) {
       if (TRAINING_SLOTS.morningDays.includes(randomDay)) {
-        // Afternoon available: pick from 7,8,9
         const availablePeriods = [7, 8, 9];
         randomPeriod = availablePeriods[Math.floor(Math.random() * availablePeriods.length)];
       } else {
-        // Morning available: pick from 1,2,4,5
         const availablePeriods = [1, 2, 4, 5];
         randomPeriod = availablePeriods[Math.floor(Math.random() * availablePeriods.length)];
       }
@@ -134,7 +155,7 @@ export function generateTimetable(
   if (specialPeriods?.library) {
     const availableDays = DAYS.filter((day) => {
       if (specialPeriods.training) {
-        return true; // Some slots will be available
+        return true;
       }
       return true;
     });
@@ -201,7 +222,6 @@ export function generateTimetable(
 
   // First, allocate labs (they need 3 consecutive periods)
   const availableLabDays = DAYS.filter((day) => {
-    // Check if both morning or afternoon slots are fully blocked
     const morningBlocked = LAB_SLOTS.morning.every((p) => blockedSlots.has(`${day}-${p}`));
     const afternoonBlocked = LAB_SLOTS.afternoon.every((p) => blockedSlots.has(`${day}-${p}`));
     return !morningBlocked || !afternoonBlocked;
@@ -213,14 +233,11 @@ export function generateTimetable(
     const remainingDays = availableLabDays.filter((d) => !usedLabDays.includes(d));
     if (remainingDays.length === 0) break;
 
-    // Try to find a day with available lab slots
     let assignedDay: string | null = null;
     let periods: number[] = [];
 
     for (const day of remainingDays.sort(() => Math.random() - 0.5)) {
-      // Check morning slots
       const morningAvailable = LAB_SLOTS.morning.every((p) => !blockedSlots.has(`${day}-${p}`));
-      // Check afternoon slots
       const afternoonAvailable = LAB_SLOTS.afternoon.every((p) => !blockedSlots.has(`${day}-${p}`));
 
       if (morningAvailable && afternoonAvailable) {
@@ -280,23 +297,29 @@ export function generateTimetable(
       blockedSlots.add(`${assignedDay}-${period}`);
     });
 
-    // Mark faculty as allocated
+    // Mark faculty as allocated and track lab day
     facultyAllocations.push({
       facultyId: assignedFaculty.id,
       day: assignedDay,
       periods,
+      isLab: true,
     });
+
+    // Update faculty weekly count - labs count as 1 class for the constraint
+    if (facultyWeeklyCount[assignedFaculty.id]) {
+      facultyWeeklyCount[assignedFaculty.id].totalClasses += 1;
+      facultyWeeklyCount[assignedFaculty.id].dailyClasses[assignedDay] += 1;
+      facultyWeeklyCount[assignedFaculty.id].labDays.push(assignedDay);
+    }
   }
 
   // Now allocate regular subjects to remaining slots
-  const regularPeriods = [1, 2, 4, 5, 7, 8, 9]; // All periods except breaks
+  const regularPeriods = [1, 2, 4, 5, 7, 8, 9];
 
   for (const day of DAYS) {
     for (const period of regularPeriods) {
-      // Skip if already allocated
       if (blockedSlots.has(`${day}-${period}`)) continue;
 
-      // Try to find a subject and its assigned faculty for this slot
       let attempts = 0;
       let assignedFaculty: Faculty | null = null;
       let selectedSubject: Subject | null = null;
@@ -329,6 +352,27 @@ export function generateTimetable(
               allocation.periods.includes(period)
           );
 
+          // Check weekly class limit (max 7 per week)
+          const weeklyCount = facultyWeeklyCount[candidateFaculty.id]?.totalClasses || 0;
+          if (weeklyCount >= MAX_CLASSES_PER_WEEK) {
+            facultyAttempts++;
+            continue;
+          }
+
+          // Check daily class limit (max 2 per day)
+          const dailyCount = facultyWeeklyCount[candidateFaculty.id]?.dailyClasses[day] || 0;
+          if (dailyCount >= MAX_CLASSES_PER_DAY) {
+            facultyAttempts++;
+            continue;
+          }
+
+          // Check if faculty has lab on this day - if so, skip normal class allocation
+          const hasLabOnDay = facultyWeeklyCount[candidateFaculty.id]?.labDays.includes(day);
+          if (hasLabOnDay) {
+            facultyAttempts++;
+            continue;
+          }
+
           if (!isFacultyBusy) {
             assignedFaculty = candidateFaculty;
             selectedSubject = subject;
@@ -341,7 +385,6 @@ export function generateTimetable(
         attempts++;
       }
 
-      // If we couldn't find a valid subject/faculty pair, leave this slot empty
       if (!assignedFaculty || !selectedSubject) {
         continue;
       }
@@ -360,6 +403,12 @@ export function generateTimetable(
         day,
         periods: [period],
       });
+
+      // Update faculty weekly count
+      if (facultyWeeklyCount[assignedFaculty.id]) {
+        facultyWeeklyCount[assignedFaculty.id].totalClasses += 1;
+        facultyWeeklyCount[assignedFaculty.id].dailyClasses[day] += 1;
+      }
     }
   }
 
