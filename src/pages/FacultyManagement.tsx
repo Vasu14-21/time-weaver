@@ -4,9 +4,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Trash2, Plus, Save, Users } from "lucide-react";
+import { Trash2, Plus, Save, Users, Edit2 } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export interface FacultySubjectMapping {
   id: string;
@@ -31,24 +45,31 @@ export interface FacultySubjectMapping {
 
 const YEARS = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
 
+const DEFAULT_BRANCHES = [
+  "CSE-A", "CSE-B", "CSE-C", "CSE-D", "CSE-E", "CSE-F", "CSE-G", "CSE-H",
+  "CS", "DS", "MECH", "CIVIL", "EEE-A", "EEE-B", "ECE-A", "ECE-B",
+  "AIML-A", "AIML-B", "AIDS-A", "AIDS-B", "AIDS-C"
+];
+
 const FacultyManagement = () => {
   const [facultyMappings, setFacultyMappings] = useState<FacultySubjectMapping[]>([]);
+  const [customBranches, setCustomBranches] = useState<string[]>([]);
   const [newFacultyName, setNewFacultyName] = useState("");
-  const [newSubjectName, setNewSubjectName] = useState("");
-  const [newSubjectCode, setNewSubjectCode] = useState("");
-  const [newSubjectBranch, setNewSubjectBranch] = useState("");
-  const [newSubjectSection, setNewSubjectSection] = useState("");
-  const [newSubjectYear, setNewSubjectYear] = useState("");
-  const [newLabName, setNewLabName] = useState("");
-  const [newLabCode, setNewLabCode] = useState("");
-  const [newLabBranch, setNewLabBranch] = useState("");
-  const [newLabSection, setNewLabSection] = useState("");
-  const [newLabYear, setNewLabYear] = useState("");
-  const [selectedFacultyId, setSelectedFacultyId] = useState<string | null>(null);
-  const [addingType, setAddingType] = useState<'subject' | 'lab' | null>(null);
+  const [newCustomBranch, setNewCustomBranch] = useState("");
+  
+  // Subject form state
+  const [showSubjectForm, setShowSubjectForm] = useState<string | null>(null);
+  const [showLabForm, setShowLabForm] = useState<string | null>(null);
+  const [subjectForm, setSubjectForm] = useState({
+    code: "", name: "", year: "", branch: "", section: ""
+  });
+  const [labForm, setLabForm] = useState({
+    code: "", name: "", year: "", branch: "", section: ""
+  });
 
   useEffect(() => {
     loadFacultyMappings();
+    loadCustomBranches();
   }, []);
 
   const loadFacultyMappings = () => {
@@ -78,10 +99,49 @@ const FacultyManagement = () => {
     }
   };
 
+  const loadCustomBranches = () => {
+    const saved = localStorage.getItem("customBranches");
+    if (saved) {
+      try {
+        setCustomBranches(JSON.parse(saved));
+      } catch (error) {
+        console.error("Error loading custom branches:", error);
+      }
+    }
+  };
+
   const saveFacultyMappings = (mappings: FacultySubjectMapping[]) => {
     localStorage.setItem("facultySubjectMappings", JSON.stringify(mappings));
     setFacultyMappings(mappings);
-    toast.success("Faculty-subject mappings saved!");
+  };
+
+  const saveCustomBranches = (branches: string[]) => {
+    localStorage.setItem("customBranches", JSON.stringify(branches));
+    setCustomBranches(branches);
+  };
+
+  const allBranches = [...DEFAULT_BRANCHES, ...customBranches];
+
+  const addCustomBranch = () => {
+    if (!newCustomBranch.trim()) {
+      toast.error("Please enter branch name");
+      return;
+    }
+    const branchUpper = newCustomBranch.trim().toUpperCase();
+    if (allBranches.includes(branchUpper)) {
+      toast.error("Branch already exists");
+      return;
+    }
+    const updated = [...customBranches, branchUpper];
+    saveCustomBranches(updated);
+    setNewCustomBranch("");
+    toast.success(`Branch "${branchUpper}" added!`);
+  };
+
+  const removeCustomBranch = (branch: string) => {
+    const updated = customBranches.filter(b => b !== branch);
+    saveCustomBranches(updated);
+    toast.success(`Branch "${branch}" removed!`);
   };
 
   const addFaculty = () => {
@@ -100,91 +160,83 @@ const FacultyManagement = () => {
     const updated = [...facultyMappings, newMapping];
     saveFacultyMappings(updated);
     setNewFacultyName("");
+    toast.success("Faculty added!");
   };
 
   const addSubjectToFaculty = (facultyId: string) => {
-    if (addingType === 'subject') {
-      if (!newSubjectName.trim() || !newSubjectCode.trim()) {
-        toast.error("Please enter both subject name and code");
-        return;
-      }
-      if (!newSubjectBranch.trim()) {
-        toast.error("Please enter branch name");
-        return;
-      }
-      if (!newSubjectYear.trim()) {
-        toast.error("Please select year");
-        return;
-      }
-
-      const updated = facultyMappings.map((mapping) => {
-        if (mapping.id === facultyId) {
-          const newSubject = {
-            id: `subject-${Date.now()}`,
-            name: newSubjectName.trim(),
-            code: newSubjectCode.trim(),
-            branch: newSubjectBranch.trim().toUpperCase(),
-            section: newSubjectSection.trim().toUpperCase(),
-            year: newSubjectYear,
-          };
-
-          return {
-            ...mapping,
-            subjects: [...mapping.subjects, newSubject],
-          };
-        }
-        return mapping;
-      });
-
-      saveFacultyMappings(updated);
-    } else if (addingType === 'lab') {
-      if (!newLabName.trim() || !newLabCode.trim()) {
-        toast.error("Please enter both lab name and code");
-        return;
-      }
-      if (!newLabBranch.trim()) {
-        toast.error("Please enter branch name");
-        return;
-      }
-      if (!newLabYear.trim()) {
-        toast.error("Please select year");
-        return;
-      }
-
-      const updated = facultyMappings.map((mapping) => {
-        if (mapping.id === facultyId) {
-          const newLab = {
-            id: `lab-${Date.now()}`,
-            name: newLabName.trim(),
-            code: newLabCode.trim(),
-            branch: newLabBranch.trim().toUpperCase(),
-            section: newLabSection.trim().toUpperCase(),
-            year: newLabYear,
-          };
-
-          return {
-            ...mapping,
-            labs: [...mapping.labs, newLab],
-          };
-        }
-        return mapping;
-      });
-
-      saveFacultyMappings(updated);
+    if (!subjectForm.code.trim() || !subjectForm.name.trim()) {
+      toast.error("Please enter both subject code and name");
+      return;
+    }
+    if (!subjectForm.year) {
+      toast.error("Please select year");
+      return;
+    }
+    if (!subjectForm.branch) {
+      toast.error("Please select branch");
+      return;
     }
 
-    setNewSubjectName("");
-    setNewSubjectCode("");
-    setNewSubjectBranch("");
-    setNewSubjectSection("");
-    setNewSubjectYear("");
-    setNewLabName("");
-    setNewLabCode("");
-    setNewLabBranch("");
-    setNewLabSection("");
-    setNewLabYear("");
-    setSelectedFacultyId(null);
-    setAddingType(null);
+    const updated = facultyMappings.map((mapping) => {
+      if (mapping.id === facultyId) {
+        const newSubject = {
+          id: `subject-${Date.now()}`,
+          name: subjectForm.name.trim(),
+          code: subjectForm.code.trim().toUpperCase(),
+          branch: subjectForm.branch,
+          section: subjectForm.section.trim().toUpperCase(),
+          year: subjectForm.year,
+        };
+        return {
+          ...mapping,
+          subjects: [...mapping.subjects, newSubject],
+        };
+      }
+      return mapping;
+    });
+
+    saveFacultyMappings(updated);
+    setSubjectForm({ code: "", name: "", year: "", branch: "", section: "" });
+    setShowSubjectForm(null);
+    toast.success("Subject added!");
+  };
+
+  const addLabToFaculty = (facultyId: string) => {
+    if (!labForm.code.trim() || !labForm.name.trim()) {
+      toast.error("Please enter both lab code and name");
+      return;
+    }
+    if (!labForm.year) {
+      toast.error("Please select year");
+      return;
+    }
+    if (!labForm.branch) {
+      toast.error("Please select branch");
+      return;
+    }
+
+    const updated = facultyMappings.map((mapping) => {
+      if (mapping.id === facultyId) {
+        const newLab = {
+          id: `lab-${Date.now()}`,
+          name: labForm.name.trim(),
+          code: labForm.code.trim().toUpperCase(),
+          branch: labForm.branch,
+          section: labForm.section.trim().toUpperCase(),
+          year: labForm.year,
+        };
+        return {
+          ...mapping,
+          labs: [...mapping.labs, newLab],
+        };
+      }
+      return mapping;
+    });
+
+    saveFacultyMappings(updated);
+    setLabForm({ code: "", name: "", year: "", branch: "", section: "" });
+    setShowLabForm(null);
+    toast.success("Lab added!");
   };
 
   const removeSubject = (facultyId: string, subjectId: string) => {
@@ -197,8 +249,8 @@ const FacultyManagement = () => {
       }
       return mapping;
     });
-
     saveFacultyMappings(updated);
+    toast.success("Subject removed!");
   };
 
   const removeLab = (facultyId: string, labId: string) => {
@@ -211,41 +263,75 @@ const FacultyManagement = () => {
       }
       return mapping;
     });
-
     saveFacultyMappings(updated);
+    toast.success("Lab removed!");
   };
 
   const removeFaculty = (facultyId: string) => {
     const updated = facultyMappings.filter((m) => m.id !== facultyId);
     saveFacultyMappings(updated);
+    toast.success("Faculty removed!");
   };
 
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
-      <div className="container mx-auto py-8">
+      <div className="container mx-auto py-8 space-y-6">
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-3">
             <Users className="h-8 w-8 text-primary" />
             <h1 className="text-4xl font-bold text-foreground">Faculty-Subject Management</h1>
           </div>
           <p className="text-muted-foreground">
-            Manage faculty members and their teaching subjects with year, branch and section assignments. These mappings will be used for automatic faculty assignment during timetable generation.
+            Manage faculty members and their teaching subjects with year, branch and section assignments.
           </p>
         </div>
 
-        {/* Add New Faculty */}
-        <Card className="mb-6">
+        {/* Add Custom Branch */}
+        <Card>
           <CardHeader>
-            <CardTitle>Add New Faculty</CardTitle>
-            <CardDescription>Enter faculty name to create a new entry</CardDescription>
+            <CardTitle className="text-lg">Manage Branches</CardTitle>
+            <CardDescription>Add custom branches if needed</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-4 items-end mb-4">
+              <div className="flex-1">
+                <Label>New Branch Name</Label>
+                <Input
+                  value={newCustomBranch}
+                  onChange={(e) => setNewCustomBranch(e.target.value.toUpperCase())}
+                  placeholder="e.g., IT-A"
+                  onKeyDown={(e) => e.key === "Enter" && addCustomBranch()}
+                />
+              </div>
+              <Button onClick={addCustomBranch} size="sm">
+                <Plus className="h-4 w-4 mr-1" /> Add Branch
+              </Button>
+            </div>
+            {customBranches.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                <span className="text-sm text-muted-foreground">Custom branches:</span>
+                {customBranches.map((branch) => (
+                  <span key={branch} className="inline-flex items-center gap-1 px-2 py-1 bg-secondary text-secondary-foreground rounded text-sm">
+                    {branch}
+                    <button onClick={() => removeCustomBranch(branch)} className="hover:text-destructive">×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Add New Faculty */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Add New Faculty</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex gap-4">
               <div className="flex-1">
-                <Label htmlFor="facultyName">Faculty Name</Label>
+                <Label>Faculty Name</Label>
                 <Input
-                  id="facultyName"
                   value={newFacultyName}
                   onChange={(e) => setNewFacultyName(e.target.value)}
                   placeholder="e.g., Dr. John Smith"
@@ -253,284 +339,199 @@ const FacultyManagement = () => {
                 />
               </div>
               <div className="flex items-end">
-                <Button onClick={addFaculty} className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  Add Faculty
+                <Button onClick={addFaculty}>
+                  <Plus className="h-4 w-4 mr-1" /> Add Faculty
                 </Button>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Faculty List */}
-        <div className="space-y-4">
-          {facultyMappings.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <p className="text-muted-foreground">
-                  No faculty members added yet. Add your first faculty member above.
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            facultyMappings.map((mapping) => (
-              <Card key={mapping.id}>
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <CardTitle>{mapping.facultyName}</CardTitle>
-                      <CardDescription>
-                        {(mapping.subjects || []).length} subject(s) • {(mapping.labs || []).length} lab(s) assigned
-                      </CardDescription>
-                    </div>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => removeFaculty(mapping.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {/* Subject and Lab Lists */}
-                  <div className="mb-4 space-y-4">
-                    {/* Theory Subjects */}
-                    <div>
-                      <h4 className="text-sm font-semibold mb-2">Theory Subjects (SUB)</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {(mapping.subjects || []).map((subject) => (
-                          <Badge key={subject.id} variant="secondary" className="gap-2 px-3 py-1">
-                            <span className="font-semibold">{subject.code}</span>
-                            <span>-</span>
-                            <span>{subject.name}</span>
-                            <span className="text-xs opacity-70">
-                              [{subject.year?.replace(" Year", "") || "?"} | {subject.branch || "?"}
-                              {subject.section ? `-${subject.section}` : ''}]
-                            </span>
-                            <button
-                              onClick={() => removeSubject(mapping.id, subject.id)}
-                              className="ml-1 hover:text-destructive"
-                            >
-                              ×
-                            </button>
-                          </Badge>
-                        ))}
-                        {(mapping.subjects || []).length === 0 && (
-                          <p className="text-sm text-muted-foreground">No subjects assigned yet</p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Lab Subjects */}
-                    <div>
-                      <h4 className="text-sm font-semibold mb-2">Lab Subjects (LAB - 3 hour blocks)</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {(mapping.labs || []).map((lab) => (
-                          <Badge key={lab.id} variant="outline" className="gap-2 px-3 py-1">
-                            <span className="font-semibold">{lab.code}</span>
-                            <span>-</span>
-                            <span>{lab.name}</span>
-                            <span className="text-xs opacity-70">
-                              [{lab.year?.replace(" Year", "") || "?"} | {lab.branch || "?"}
-                              {lab.section ? `-${lab.section}` : ''}]
-                            </span>
-                            <button
-                              onClick={() => removeLab(mapping.id, lab.id)}
-                              className="ml-1 hover:text-destructive"
-                            >
-                              ×
-                            </button>
-                          </Badge>
-                        ))}
-                        {(mapping.labs || []).length === 0 && (
-                          <p className="text-sm text-muted-foreground">No labs assigned yet</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Add Subject or Lab */}
-                  {selectedFacultyId === mapping.id && addingType ? (
-                    <div className="space-y-3 border-t pt-4">
-                      {addingType === 'subject' && (
-                        <div className="space-y-3">
-                          <h4 className="font-semibold">Add Theory Subject</h4>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <Label htmlFor={`subjectCode-${mapping.id}`}>Subject Code *</Label>
-                              <Input
-                                id={`subjectCode-${mapping.id}`}
-                                value={newSubjectCode}
-                                onChange={(e) => setNewSubjectCode(e.target.value)}
-                                placeholder="e.g., CS101"
-                              />
-                            </div>
-                            <div>
-                              <Label htmlFor={`subjectName-${mapping.id}`}>Subject Name *</Label>
-                              <Input
-                                id={`subjectName-${mapping.id}`}
-                                value={newSubjectName}
-                                onChange={(e) => setNewSubjectName(e.target.value)}
-                                placeholder="e.g., Data Structures"
-                              />
-                            </div>
-                            <div>
-                              <Label htmlFor={`subjectYear-${mapping.id}`}>Year *</Label>
-                              <select
-                                id={`subjectYear-${mapping.id}`}
-                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-                                value={newSubjectYear}
-                                onChange={(e) => setNewSubjectYear(e.target.value)}
-                              >
-                                <option value="">Select Year</option>
-                                {YEARS.map((y) => (
-                                  <option key={y} value={y}>{y}</option>
-                                ))}
-                              </select>
-                            </div>
-                            <div>
-                              <Label htmlFor={`subjectBranch-${mapping.id}`}>Branch *</Label>
-                              <Input
-                                id={`subjectBranch-${mapping.id}`}
-                                value={newSubjectBranch}
-                                onChange={(e) => setNewSubjectBranch(e.target.value)}
-                                placeholder="e.g., CSE"
-                              />
-                            </div>
-                            <div className="col-span-2">
-                              <Label htmlFor={`subjectSection-${mapping.id}`}>Section</Label>
-                              <Input
-                                id={`subjectSection-${mapping.id}`}
-                                value={newSubjectSection}
-                                onChange={(e) => setNewSubjectSection(e.target.value)}
-                                placeholder="e.g., A (optional)"
-                                onKeyDown={(e) => e.key === "Enter" && addSubjectToFaculty(mapping.id)}
-                              />
-                            </div>
+        {/* Faculty Table */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Faculty List</CardTitle>
+            <CardDescription>All faculty members and their assigned subjects/labs</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {facultyMappings.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">
+                No faculty members added yet. Add your first faculty member above.
+              </p>
+            ) : (
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="w-[200px]">Faculty Name</TableHead>
+                      <TableHead>Subjects (Theory)</TableHead>
+                      <TableHead>Labs</TableHead>
+                      <TableHead className="w-[150px]">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {facultyMappings.map((mapping) => (
+                      <TableRow key={mapping.id}>
+                        <TableCell className="font-medium align-top">
+                          {mapping.facultyName}
+                        </TableCell>
+                        <TableCell className="align-top">
+                          <div className="space-y-2">
+                            {mapping.subjects.map((subject) => (
+                              <div key={subject.id} className="flex items-center gap-2 bg-primary/10 px-2 py-1 rounded text-sm">
+                                <span className="font-semibold">{subject.code}</span>
+                                <span>-</span>
+                                <span>{subject.name}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  [{subject.year?.replace(" Year", "")} | {subject.branch}{subject.section ? `-${subject.section}` : ''}]
+                                </span>
+                                <button onClick={() => removeSubject(mapping.id, subject.id)} className="ml-auto text-destructive hover:text-destructive/80">
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ))}
+                            {showSubjectForm === mapping.id ? (
+                              <div className="space-y-2 p-2 border rounded bg-card">
+                                <div className="grid grid-cols-2 gap-2">
+                                  <Input
+                                    placeholder="Subject Code *"
+                                    value={subjectForm.code}
+                                    onChange={(e) => setSubjectForm({...subjectForm, code: e.target.value})}
+                                  />
+                                  <Input
+                                    placeholder="Subject Name *"
+                                    value={subjectForm.name}
+                                    onChange={(e) => setSubjectForm({...subjectForm, name: e.target.value})}
+                                  />
+                                  <Select value={subjectForm.year} onValueChange={(v) => setSubjectForm({...subjectForm, year: v})}>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Year *" />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-popover">
+                                      {YEARS.map((y) => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+                                    </SelectContent>
+                                  </Select>
+                                  <Select value={subjectForm.branch} onValueChange={(v) => setSubjectForm({...subjectForm, branch: v})}>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Branch *" />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-popover max-h-[200px]">
+                                      {allBranches.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                                    </SelectContent>
+                                  </Select>
+                                  <Input
+                                    placeholder="Section (optional)"
+                                    value={subjectForm.section}
+                                    onChange={(e) => setSubjectForm({...subjectForm, section: e.target.value})}
+                                    className="col-span-2"
+                                  />
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button size="sm" onClick={() => addSubjectToFaculty(mapping.id)}>
+                                    <Save className="h-3 w-3 mr-1" /> Save
+                                  </Button>
+                                  <Button size="sm" variant="outline" onClick={() => {
+                                    setShowSubjectForm(null);
+                                    setSubjectForm({ code: "", name: "", year: "", branch: "", section: "" });
+                                  }}>
+                                    Cancel
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <Button size="sm" variant="ghost" onClick={() => setShowSubjectForm(mapping.id)}>
+                                <Plus className="h-3 w-3 mr-1" /> Add Subject
+                              </Button>
+                            )}
                           </div>
-                        </div>
-                      )}
-
-                      {addingType === 'lab' && (
-                        <div className="space-y-3">
-                          <h4 className="font-semibold">Add Lab Subject (3-hour block)</h4>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <Label htmlFor={`labCode-${mapping.id}`}>Lab Code *</Label>
-                              <Input
-                                id={`labCode-${mapping.id}`}
-                                value={newLabCode}
-                                onChange={(e) => setNewLabCode(e.target.value)}
-                                placeholder="e.g., CS101L"
-                              />
-                            </div>
-                            <div>
-                              <Label htmlFor={`labName-${mapping.id}`}>Lab Name *</Label>
-                              <Input
-                                id={`labName-${mapping.id}`}
-                                value={newLabName}
-                                onChange={(e) => setNewLabName(e.target.value)}
-                                placeholder="e.g., Data Structures Lab"
-                              />
-                            </div>
-                            <div>
-                              <Label htmlFor={`labYear-${mapping.id}`}>Year *</Label>
-                              <select
-                                id={`labYear-${mapping.id}`}
-                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-                                value={newLabYear}
-                                onChange={(e) => setNewLabYear(e.target.value)}
-                              >
-                                <option value="">Select Year</option>
-                                {YEARS.map((y) => (
-                                  <option key={y} value={y}>{y}</option>
-                                ))}
-                              </select>
-                            </div>
-                            <div>
-                              <Label htmlFor={`labBranch-${mapping.id}`}>Branch *</Label>
-                              <Input
-                                id={`labBranch-${mapping.id}`}
-                                value={newLabBranch}
-                                onChange={(e) => setNewLabBranch(e.target.value)}
-                                placeholder="e.g., CSE"
-                              />
-                            </div>
-                            <div className="col-span-2">
-                              <Label htmlFor={`labSection-${mapping.id}`}>Section</Label>
-                              <Input
-                                id={`labSection-${mapping.id}`}
-                                value={newLabSection}
-                                onChange={(e) => setNewLabSection(e.target.value)}
-                                placeholder="e.g., A (optional)"
-                                onKeyDown={(e) => e.key === "Enter" && addSubjectToFaculty(mapping.id)}
-                              />
-                            </div>
+                        </TableCell>
+                        <TableCell className="align-top">
+                          <div className="space-y-2">
+                            {mapping.labs.map((lab) => (
+                              <div key={lab.id} className="flex items-center gap-2 bg-secondary/20 px-2 py-1 rounded text-sm">
+                                <span className="font-semibold">{lab.code}</span>
+                                <span>-</span>
+                                <span>{lab.name}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  [{lab.year?.replace(" Year", "")} | {lab.branch}{lab.section ? `-${lab.section}` : ''}]
+                                </span>
+                                <button onClick={() => removeLab(mapping.id, lab.id)} className="ml-auto text-destructive hover:text-destructive/80">
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ))}
+                            {showLabForm === mapping.id ? (
+                              <div className="space-y-2 p-2 border rounded bg-card">
+                                <div className="grid grid-cols-2 gap-2">
+                                  <Input
+                                    placeholder="Lab Code *"
+                                    value={labForm.code}
+                                    onChange={(e) => setLabForm({...labForm, code: e.target.value})}
+                                  />
+                                  <Input
+                                    placeholder="Lab Name *"
+                                    value={labForm.name}
+                                    onChange={(e) => setLabForm({...labForm, name: e.target.value})}
+                                  />
+                                  <Select value={labForm.year} onValueChange={(v) => setLabForm({...labForm, year: v})}>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Year *" />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-popover">
+                                      {YEARS.map((y) => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+                                    </SelectContent>
+                                  </Select>
+                                  <Select value={labForm.branch} onValueChange={(v) => setLabForm({...labForm, branch: v})}>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Branch *" />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-popover max-h-[200px]">
+                                      {allBranches.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                                    </SelectContent>
+                                  </Select>
+                                  <Input
+                                    placeholder="Section (optional)"
+                                    value={labForm.section}
+                                    onChange={(e) => setLabForm({...labForm, section: e.target.value})}
+                                    className="col-span-2"
+                                  />
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button size="sm" onClick={() => addLabToFaculty(mapping.id)}>
+                                    <Save className="h-3 w-3 mr-1" /> Save
+                                  </Button>
+                                  <Button size="sm" variant="outline" onClick={() => {
+                                    setShowLabForm(null);
+                                    setLabForm({ code: "", name: "", year: "", branch: "", section: "" });
+                                  }}>
+                                    Cancel
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <Button size="sm" variant="ghost" onClick={() => setShowLabForm(mapping.id)}>
+                                <Plus className="h-3 w-3 mr-1" /> Add Lab
+                              </Button>
+                            )}
                           </div>
-                        </div>
-                      )}
-
-                      <div className="flex gap-2">
-                        <Button onClick={() => addSubjectToFaculty(mapping.id)} size="sm">
-                          <Save className="h-4 w-4 mr-2" />
-                          Save {addingType === 'subject' ? 'Subject' : 'Lab'}
-                        </Button>
-                        <Button
-                          onClick={() => {
-                            setSelectedFacultyId(null);
-                            setAddingType(null);
-                            setNewSubjectName("");
-                            setNewSubjectCode("");
-                            setNewSubjectBranch("");
-                            setNewSubjectSection("");
-                            setNewSubjectYear("");
-                            setNewLabName("");
-                            setNewLabCode("");
-                            setNewLabBranch("");
-                            setNewLabSection("");
-                            setNewLabYear("");
-                          }}
-                          variant="outline"
-                          size="sm"
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={() => {
-                          setSelectedFacultyId(mapping.id);
-                          setAddingType('subject');
-                        }}
-                        variant="outline"
-                        size="sm"
-                        className="gap-2"
-                      >
-                        <Plus className="h-4 w-4" />
-                        Add Subject
-                      </Button>
-                      <Button
-                        onClick={() => {
-                          setSelectedFacultyId(mapping.id);
-                          setAddingType('lab');
-                        }}
-                        variant="outline"
-                        size="sm"
-                        className="gap-2"
-                      >
-                        <Plus className="h-4 w-4" />
-                        Add Lab
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))
-          )}
-        </div>
+                        </TableCell>
+                        <TableCell className="align-top">
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => removeFaculty(mapping.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

@@ -9,10 +9,11 @@ import { TimetableEditor } from "./TimetableEditor";
 interface TimetableDisplayProps {
   config: ConfigData;
   entries: TimetableEntry[];
-  onReset: () => void;
+  onReset?: () => void;
   onSave?: () => void;
   hideResetButton?: boolean;
   onUpdateEntry?: (updatedEntry: TimetableEntry, oldEntry?: TimetableEntry) => void;
+  onUpdateEntries?: (entries: TimetableEntry[]) => void;
   enableEdit?: boolean;
 }
 
@@ -23,11 +24,19 @@ export function TimetableDisplay({
   onSave, 
   hideResetButton,
   onUpdateEntry,
-  enableEdit = false
+  onUpdateEntries,
+  enableEdit = true
 }: TimetableDisplayProps) {
+  const [localEntries, setLocalEntries] = useState(entries);
   const [editingEntry, setEditingEntry] = useState<{ entry: TimetableEntry | null; day: string; period: number } | null>(null);
+  
+  // Update local entries when props change
+  React.useEffect(() => {
+    setLocalEntries(entries);
+  }, [entries]);
+  
   const getEntry = (day: string, period: number) => {
-    return entries.find((e) => e.day === day && e.period === period);
+    return localEntries.find((e) => e.day === day && e.period === period);
   };
 
   const getSubjectName = (subjectId: string) => {
@@ -55,9 +64,24 @@ export function TimetableDisplay({
   };
 
   const handleSaveEntry = (updatedEntry: TimetableEntry) => {
+    let newEntries: TimetableEntry[];
+    
+    if (editingEntry?.entry) {
+      // Update existing entry
+      newEntries = localEntries.map(e => 
+        e.day === editingEntry.day && e.period === editingEntry.period ? updatedEntry : e
+      );
+    } else {
+      // Add new entry
+      newEntries = [...localEntries, updatedEntry];
+    }
+    
+    setLocalEntries(newEntries);
+    if (onUpdateEntries) {
+      onUpdateEntries(newEntries);
+    }
     if (onUpdateEntry) {
-      const oldEntry = editingEntry?.entry;
-      onUpdateEntry(updatedEntry, oldEntry);
+      onUpdateEntry(updatedEntry, editingEntry?.entry || undefined);
     }
     setEditingEntry(null);
   };
