@@ -1,82 +1,127 @@
-import React, { useState, useRef, KeyboardEvent, useEffect } from "react";
+import React, { useState, KeyboardEvent, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ConfigData, Faculty, Subject, SpecialPeriods } from "@/types/timetable";
-import { Plus, Trash2, AlertCircle } from "lucide-react";
+import { ConfigData, Faculty, Subject, SpecialPeriods, Timetable } from "@/types/timetable";
+import { AlertCircle, X } from "lucide-react";
 import { toast } from "sonner";
 import { FacultySubjectMapping } from "@/pages/FacultyManagement";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { generateTimetable } from "@/utils/timetableGenerator";
+
+interface BranchConfig {
+  branch: string;
+  specialPeriods: SpecialPeriods;
+  theoryCount: string;
+  labCount: string;
+  selectedFaculty: string[];
+  facultyErrors: string[];
+}
 
 interface ConfigFormProps {
-  onComplete: (config: ConfigData) => void;
+  onComplete: (timetables: Timetable[]) => void;
 }
+
+const DEFAULT_BRANCHES = [
+  "CSE-A", "CSE-B", "CSE-C", "CSE-D", "CSE-E", "CSE-F", "CSE-G", "CSE-H",
+  "CS", "DS", "MECH", "CIVIL", "EEE-A", "EEE-B", "ECE-A", "ECE-B",
+  "AIML-A", "AIML-B", "AIDS-A", "AIDS-B", "AIDS-C"
+];
 
 export function ConfigForm({ onComplete }: ConfigFormProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [year, setYear] = useState("");
-  const [branch, setBranch] = useState("");
-  const [section, setSection] = useState("");
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [labs, setLabs] = useState<Subject[]>([]);
-  const [faculty, setFaculty] = useState<Faculty[]>([]);
+  const [selectedBranches, setSelectedBranches] = useState<string[]>([]);
+  const [branchConfigs, setBranchConfigs] = useState<Record<string, BranchConfig>>({});
   const [facultyMappings, setFacultyMappings] = useState<FacultySubjectMapping[]>([]);
-
-  const [theoryCount, setTheoryCount] = useState("");
-  const [labCount, setLabCount] = useState("");
-  const [selectedFaculty, setSelectedFaculty] = useState<string[]>([]);
-  const [facultyErrors, setFacultyErrors] = useState<string[]>([]);
-
-  // Special periods state
-  const [specialPeriods, setSpecialPeriods] = useState<SpecialPeriods>({
-    sports: false,
-    library: false,
-    training: false,
-  });
+  const [customBranches, setCustomBranches] = useState<string[]>([]);
+  const [currentBranchIndex, setCurrentBranchIndex] = useState(0);
 
   useEffect(() => {
-    const saved = localStorage.getItem("facultySubjectMappings");
-    if (saved) {
+    const savedMappings = localStorage.getItem("facultySubjectMappings");
+    if (savedMappings) {
       try {
-        setFacultyMappings(JSON.parse(saved));
+        setFacultyMappings(JSON.parse(savedMappings));
       } catch (error) {
         console.error("Error loading faculty mappings:", error);
       }
     }
+
+    const savedBranches = localStorage.getItem("customBranches");
+    if (savedBranches) {
+      try {
+        setCustomBranches(JSON.parse(savedBranches));
+      } catch (error) {
+        console.error("Error loading custom branches:", error);
+      }
+    }
   }, []);
+
+  const allBranches = [...DEFAULT_BRANCHES, ...customBranches];
+
+  const toggleBranch = (branch: string) => {
+    if (selectedBranches.includes(branch)) {
+      setSelectedBranches(selectedBranches.filter(b => b !== branch));
+      const newConfigs = { ...branchConfigs };
+      delete newConfigs[branch];
+      setBranchConfigs(newConfigs);
+    } else {
+      setSelectedBranches([...selectedBranches, branch]);
+      setBranchConfigs({
+        ...branchConfigs,
+        [branch]: {
+          branch,
+          specialPeriods: { sports: false, library: false, training: false },
+          theoryCount: "",
+          labCount: "",
+          selectedFaculty: [],
+          facultyErrors: [],
+        }
+      });
+    }
+  };
+
+  const updateBranchConfig = (branch: string, updates: Partial<BranchConfig>) => {
+    setBranchConfigs({
+      ...branchConfigs,
+      [branch]: { ...branchConfigs[branch], ...updates }
+    });
+  };
 
   const handleStep1Next = () => {
     if (!year.trim()) {
       toast.error("Please select year");
       return;
     }
-    if (!branch.trim()) {
-      toast.error("Please enter branch name");
+    if (selectedBranches.length === 0) {
+      toast.error("Please select at least one branch");
       return;
     }
     setCurrentStep(2);
+    setCurrentBranchIndex(0);
   };
 
-  const handleStep2Next = () => {
-    const theory = parseInt(theoryCount);
-    const lab = parseInt(labCount) || 0;
-    
-    if (isNaN(theory) || theory < 1) {
-      toast.error("Please enter a valid theory subject count (minimum 1)");
-      return;
+  const getBranchName = (branch: string) => {
+    // Extract branch name and section from combined string like "CSE-A"
+    const parts = branch.split("-");
+    if (parts.length > 1) {
+      return { branchName: parts[0], section: parts.slice(1).join("-") };
     }
-    
-    const totalCount = theory + lab;
-    setSelectedFaculty(new Array(totalCount).fill(""));
-    setFacultyErrors(new Array(totalCount).fill(""));
-    setCurrentStep(3);
+    return { branchName: branch, section: "" };
   };
 
-  // Get filtered faculty list based on year, branch and section
-  const getFilteredFacultyForSubject = (isLab: boolean) => {
-    const branchUpper = branch.toUpperCase();
+  const getFilteredFacultyForBranch = (branch: string, isLab: boolean) => {
+    const { branchName, section } = getBranchName(branch);
+    const branchUpper = branchName.toUpperCase();
     const sectionUpper = section.toUpperCase();
 
     return facultyMappings.filter((mapping) => {
@@ -86,13 +131,13 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
         const itemSection = (item.section || "").toUpperCase();
         const itemYear = item.year || "";
         
-        // Match year
         if (itemYear && itemYear !== year) return false;
         
-        // Match branch
-        if (itemBranch !== branchUpper) return false;
+        // Match branch - check if itemBranch matches or if full branch string matches
+        const fullBranch = branch.toUpperCase();
+        if (itemBranch !== branchUpper && itemBranch !== fullBranch) return false;
         
-        // If section is provided, match it; otherwise accept any
+        // If section is provided in selection, match it
         if (sectionUpper && itemSection && itemSection !== sectionUpper) return false;
         
         return true;
@@ -100,9 +145,9 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
     });
   };
 
-  // Check if a faculty has valid subjects for this branch/year
-  const isFacultyValidForBranch = (facultyName: string, isLab: boolean): boolean => {
-    const branchUpper = branch.toUpperCase();
+  const isFacultyValidForBranch = (facultyName: string, branch: string, isLab: boolean): boolean => {
+    const { branchName, section } = getBranchName(branch);
+    const branchUpper = branchName.toUpperCase();
     const sectionUpper = section.toUpperCase();
 
     const mapping = facultyMappings.find(m => 
@@ -117,22 +162,20 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
       const itemSection = (item.section || "").toUpperCase();
       const itemYear = item.year || "";
       
-      // Match year
       if (itemYear && itemYear !== year) return false;
       
-      // Match branch
-      if (itemBranch !== branchUpper) return false;
+      const fullBranch = branch.toUpperCase();
+      if (itemBranch !== branchUpper && itemBranch !== fullBranch) return false;
       
-      // If section is provided, match it
       if (sectionUpper && itemSection && itemSection !== sectionUpper) return false;
       
       return true;
     });
   };
 
-  // Get subject/lab details for a faculty based on year/branch/section
-  const getFacultySubjectDetails = (facultyName: string, isLab: boolean) => {
-    const branchUpper = branch.toUpperCase();
+  const getFacultySubjectDetails = (facultyName: string, branch: string, isLab: boolean) => {
+    const { branchName, section } = getBranchName(branch);
+    const branchUpper = branchName.toUpperCase();
     const sectionUpper = section.toUpperCase();
 
     const mapping = facultyMappings.find(m => 
@@ -141,40 +184,63 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
     if (!mapping) return null;
 
     const items = isLab ? (mapping.labs || []) : (mapping.subjects || []);
-    const matchedItem = items.find((item) => {
+    return items.find((item) => {
       const itemBranch = (item.branch || "").toUpperCase();
       const itemSection = (item.section || "").toUpperCase();
       const itemYear = item.year || "";
       
-      // Match year
       if (itemYear && itemYear !== year) return false;
       
-      if (itemBranch !== branchUpper) return false;
+      const fullBranch = branch.toUpperCase();
+      if (itemBranch !== branchUpper && itemBranch !== fullBranch) return false;
+      
       if (sectionUpper && itemSection && itemSection !== sectionUpper) return false;
       
       return true;
     });
-
-    return matchedItem;
   };
 
-  const updateFacultySelection = (index: number, facultyName: string) => {
-    const theory = parseInt(theoryCount);
+  const handleStep2Next = () => {
+    const currentBranch = selectedBranches[currentBranchIndex];
+    const config = branchConfigs[currentBranch];
+    
+    const theory = parseInt(config.theoryCount);
+    if (isNaN(theory) || theory < 1) {
+      toast.error("Please enter a valid theory subject count (minimum 1)");
+      return;
+    }
+
+    const lab = parseInt(config.labCount) || 0;
+    const totalCount = theory + lab;
+    
+    updateBranchConfig(currentBranch, {
+      selectedFaculty: new Array(totalCount).fill(""),
+      facultyErrors: new Array(totalCount).fill(""),
+    });
+
+    if (currentBranchIndex < selectedBranches.length - 1) {
+      setCurrentBranchIndex(currentBranchIndex + 1);
+    } else {
+      setCurrentStep(3);
+      setCurrentBranchIndex(0);
+    }
+  };
+
+  const updateFacultySelection = (branch: string, index: number, facultyName: string) => {
+    const config = branchConfigs[branch];
+    const theory = parseInt(config.theoryCount);
     const isLab = index >= theory;
     
-    // Validate faculty immediately
-    const newErrors = [...facultyErrors];
+    const newErrors = [...config.facultyErrors];
     
     if (facultyName.trim()) {
-      const isValid = isFacultyValidForBranch(facultyName, isLab);
+      const isValid = isFacultyValidForBranch(facultyName, branch, isLab);
       if (!isValid) {
-        newErrors[index] = `"${facultyName}" has no ${isLab ? 'labs' : 'subjects'} for ${year} ${branch}${section ? `-${section}` : ''}`;
-        toast.error(`Invalid faculty: "${facultyName}" has no ${isLab ? 'labs' : 'subjects'} assigned for ${year} ${branch}${section ? `-${section}` : ''}`);
-        // Clear the invalid faculty name
-        const updated = [...selectedFaculty];
+        newErrors[index] = `"${facultyName}" has no ${isLab ? 'labs' : 'subjects'} for ${year} ${branch}`;
+        toast.error(`Invalid faculty: "${facultyName}" has no ${isLab ? 'labs' : 'subjects'} for ${year} ${branch}`);
+        const updated = [...config.selectedFaculty];
         updated[index] = "";
-        setSelectedFaculty(updated);
-        setFacultyErrors(newErrors);
+        updateBranchConfig(branch, { selectedFaculty: updated, facultyErrors: newErrors });
         return;
       } else {
         newErrors[index] = "";
@@ -183,267 +249,264 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
       newErrors[index] = "";
     }
     
-    const updated = [...selectedFaculty];
+    const updated = [...config.selectedFaculty];
     updated[index] = facultyName;
-    setSelectedFaculty(updated);
-    setFacultyErrors(newErrors);
+    updateBranchConfig(branch, { selectedFaculty: updated, facultyErrors: newErrors });
   };
 
   const handleStep3Next = () => {
-    const emptyCount = selectedFaculty.filter(f => !f.trim()).length;
+    const currentBranch = selectedBranches[currentBranchIndex];
+    const config = branchConfigs[currentBranch];
+    
+    const emptyCount = config.selectedFaculty.filter(f => !f.trim()).length;
     if (emptyCount > 0) {
-      toast.error(`Please select all ${selectedFaculty.length} faculty members`);
+      toast.error(`Please select all ${config.selectedFaculty.length} faculty members for ${currentBranch}`);
       return;
     }
     
-    // Check for any validation errors
-    const hasErrors = facultyErrors.some(e => e);
+    const hasErrors = config.facultyErrors.some(e => e);
     if (hasErrors) {
       toast.error("Please fix faculty validation errors before proceeding");
       return;
     }
-    
-    generateAndComplete();
-  };
 
-  const generateAndComplete = () => {
-    const theory = parseInt(theoryCount);
-    const lab = parseInt(labCount) || 0;
-    
-    const subjectsList: Subject[] = [];
-    const labsList: Subject[] = [];
-    const facultyList: Faculty[] = [];
-
-    selectedFaculty.forEach((facultyName, index) => {
-      const isLab = index >= theory;
-      const subjectDetails = getFacultySubjectDetails(facultyName, isLab);
-      
-      let subjectCode = "";
-      let subjectName = "";
-      
-      if (subjectDetails) {
-        subjectCode = subjectDetails.code;
-        subjectName = subjectDetails.name;
-      } else {
-        // Fallback if no mapping found
-        if (isLab) {
-          subjectCode = `LAB${index - theory + 1}`;
-          subjectName = `${facultyName} Lab`;
-        } else {
-          subjectCode = `SUB${index + 1}`;
-          subjectName = `${facultyName} Subject`;
-        }
-      }
-
-      const subjectItem: Subject = {
-        id: `${isLab ? 'lab' : 'subject'}-${Date.now()}-${index}`,
-        name: subjectName,
-        code: subjectCode,
-        isLab,
-      };
-
-      if (isLab) {
-        labsList.push(subjectItem);
-      } else {
-        subjectsList.push(subjectItem);
-      }
-
-      facultyList.push({
-        id: `faculty-${index + 1}`,
-        name: facultyName,
-        subjectId: subjectItem.id,
-        subjectCode,
-      });
-    });
-
-    const config: ConfigData = {
-      year,
-      branch: section ? `${branch}-${section}` : branch,
-      section,
-      faculty: facultyList,
-      subjects: subjectsList,
-      labs: labsList,
-      specialPeriods,
-    };
-
-    onComplete(config);
-  };
-
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>, action?: () => void) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (action) {
-        action();
-      } else {
-        const form = e.currentTarget.form;
-        if (form) {
-          const inputs = Array.from(form.querySelectorAll('input:not([disabled])')) as HTMLInputElement[];
-          const index = inputs.indexOf(e.currentTarget);
-          if (index < inputs.length - 1) {
-            inputs[index + 1].focus();
-          }
-        }
-      }
+    if (currentBranchIndex < selectedBranches.length - 1) {
+      setCurrentBranchIndex(currentBranchIndex + 1);
+    } else {
+      generateAllTimetables();
     }
   };
 
-  const filteredTheoryFaculty = getFilteredFacultyForSubject(false);
-  const filteredLabFaculty = getFilteredFacultyForSubject(true);
+  const generateAllTimetables = () => {
+    const timetables: Timetable[] = [];
+
+    selectedBranches.forEach((branch) => {
+      const config = branchConfigs[branch];
+      const { branchName, section } = getBranchName(branch);
+      const theory = parseInt(config.theoryCount);
+      const lab = parseInt(config.labCount) || 0;
+      
+      const subjectsList: Subject[] = [];
+      const labsList: Subject[] = [];
+      const facultyList: Faculty[] = [];
+
+      config.selectedFaculty.forEach((facultyName, index) => {
+        const isLab = index >= theory;
+        const subjectDetails = getFacultySubjectDetails(facultyName, branch, isLab);
+        
+        let subjectCode = "";
+        let subjectName = "";
+        
+        if (subjectDetails) {
+          subjectCode = subjectDetails.code;
+          subjectName = subjectDetails.name;
+        } else {
+          if (isLab) {
+            subjectCode = `LAB${index - theory + 1}`;
+            subjectName = `${facultyName} Lab`;
+          } else {
+            subjectCode = `SUB${index + 1}`;
+            subjectName = `${facultyName} Subject`;
+          }
+        }
+
+        const subjectItem: Subject = {
+          id: `${isLab ? 'lab' : 'subject'}-${Date.now()}-${index}-${branch}`,
+          name: subjectName,
+          code: subjectCode,
+          isLab,
+        };
+
+        if (isLab) {
+          labsList.push(subjectItem);
+        } else {
+          subjectsList.push(subjectItem);
+        }
+
+        facultyList.push({
+          id: `faculty-${index + 1}-${branch}`,
+          name: facultyName,
+          subjectId: subjectItem.id,
+          subjectCode,
+        });
+      });
+
+      const configData: ConfigData = {
+        year,
+        branch: section ? `${branchName}-${section}` : branchName,
+        section,
+        faculty: facultyList,
+        subjects: subjectsList,
+        labs: labsList,
+        specialPeriods: config.specialPeriods,
+      };
+
+      const entries = generateTimetable(subjectsList, labsList, facultyList, config.specialPeriods);
+      timetables.push({ config: configData, entries });
+    });
+
+    onComplete(timetables);
+  };
+
+  const currentBranch = selectedBranches[currentBranchIndex];
+  const currentConfig = currentBranch ? branchConfigs[currentBranch] : null;
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
+    <div className="max-w-3xl mx-auto p-6">
       <Card>
         <CardHeader>
-          <CardTitle>Configure Timetable - Step {currentStep} of 3</CardTitle>
+          <CardTitle>
+            Configure Timetable - Step {currentStep} of 3
+            {currentStep > 1 && selectedBranches.length > 1 && (
+              <span className="text-sm font-normal ml-2">
+                (Branch {currentBranchIndex + 1} of {selectedBranches.length}: {currentBranch})
+              </span>
+            )}
+          </CardTitle>
           <CardDescription>
-            {currentStep === 1 && "Enter year, branch and section information"}
-            {currentStep === 2 && "Enter subject counts and special periods"}
-            {currentStep === 3 && `Select faculty members for ${year} ${branch}${section ? `-${section}` : ''}`}
+            {currentStep === 1 && "Select year and branches to generate timetables"}
+            {currentStep === 2 && `Configure subject counts and special periods for ${currentBranch}`}
+            {currentStep === 3 && `Select faculty members for ${year} ${currentBranch}`}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Step 1: Year, Branch, Section */}
+          {/* Step 1: Year and Branch Selection */}
           {currentStep === 1 && (
             <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
               <div className="space-y-2">
                 <Label htmlFor="year">Year *</Label>
-                <select
-                  id="year"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-                  value={year}
-                  onChange={(e) => setYear(e.target.value)}
-                >
-                  <option value="">Select Year</option>
-                  <option value="1st Year">1st Year</option>
-                  <option value="2nd Year">2nd Year</option>
-                  <option value="3rd Year">3rd Year</option>
-                  <option value="4th Year">4th Year</option>
-                </select>
+                <Select value={year} onValueChange={setYear}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select Year" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover">
+                    <SelectItem value="1st Year">1st Year</SelectItem>
+                    <SelectItem value="2nd Year">2nd Year</SelectItem>
+                    <SelectItem value="3rd Year">3rd Year</SelectItem>
+                    <SelectItem value="4th Year">4th Year</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+
               <div className="space-y-2">
-                <Label htmlFor="branch">Branch *</Label>
-                <Input
-                  id="branch"
-                  placeholder="e.g., CSE"
-                  value={branch}
-                  onChange={(e) => setBranch(e.target.value.toUpperCase())}
-                  onKeyDown={(e) => handleKeyDown(e)}
-                />
+                <Label>Select Branches * (can select multiple)</Label>
+                <div className="flex flex-wrap gap-2 p-4 border rounded-lg max-h-[300px] overflow-y-auto">
+                  {allBranches.map((branch) => (
+                    <Badge
+                      key={branch}
+                      variant={selectedBranches.includes(branch) ? "default" : "outline"}
+                      className="cursor-pointer px-3 py-1.5 text-sm"
+                      onClick={() => toggleBranch(branch)}
+                    >
+                      {branch}
+                      {selectedBranches.includes(branch) && (
+                        <X className="h-3 w-3 ml-1" />
+                      )}
+                    </Badge>
+                  ))}
+                </div>
+                {selectedBranches.length > 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    Selected: {selectedBranches.join(", ")}
+                  </p>
+                )}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="section">Section</Label>
-                <Input
-                  id="section"
-                  placeholder="e.g., A (leave empty if no sections)"
-                  value={section}
-                  onChange={(e) => setSection(e.target.value.toUpperCase())}
-                  onKeyDown={(e) => handleKeyDown(e, handleStep1Next)}
-                />
-              </div>
+
               <Button onClick={handleStep1Next} className="w-full">
-                Next
+                Next: Configure Each Branch
               </Button>
             </form>
           )}
 
-          {/* Step 2: Subject Counts and Special Periods */}
-          {currentStep === 2 && (
+          {/* Step 2: Subject Counts and Special Periods per Branch */}
+          {currentStep === 2 && currentConfig && (
             <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="text-sm font-medium">
+                  Configuring: <span className="text-primary">{year} - {currentBranch}</span>
+                </p>
+              </div>
+
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="theoryCount">Number of Theory Subjects *</Label>
+                  <Label>Number of Theory Subjects *</Label>
                   <Input
-                    id="theoryCount"
                     type="number"
                     min="1"
                     placeholder="e.g., 5"
-                    value={theoryCount}
-                    onChange={(e) => setTheoryCount(e.target.value)}
-                    onKeyDown={(e) => handleKeyDown(e)}
+                    value={currentConfig.theoryCount}
+                    onChange={(e) => updateBranchConfig(currentBranch, { theoryCount: e.target.value })}
                   />
-                  <p className="text-sm text-muted-foreground">Minimum: 1 subject</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="labCount">Number of Lab Subjects</Label>
+                  <Label>Number of Lab Subjects</Label>
                   <Input
-                    id="labCount"
                     type="number"
                     min="0"
-                    placeholder="e.g., 2 (optional - leave empty to skip)"
-                    value={labCount}
-                    onChange={(e) => setLabCount(e.target.value)}
-                    onKeyDown={(e) => handleKeyDown(e)}
+                    placeholder="e.g., 2 (optional)"
+                    value={currentConfig.labCount}
+                    onChange={(e) => updateBranchConfig(currentBranch, { labCount: e.target.value })}
                   />
-                  <p className="text-sm text-muted-foreground">Optional: Leave empty or enter 0 to skip labs</p>
+                  <p className="text-sm text-muted-foreground">Optional: Leave empty or 0 to skip labs</p>
                 </div>
 
                 {/* Special Periods */}
                 <div className="space-y-3 border-t pt-4">
                   <Label className="text-base font-semibold">Special Periods (Optional)</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Select any special periods to include in the timetable
-                  </p>
                   
                   <div className="space-y-3">
                     <div className="flex items-start space-x-3">
                       <Checkbox
-                        id="sports"
-                        checked={specialPeriods.sports}
+                        id={`sports-${currentBranch}`}
+                        checked={currentConfig.specialPeriods.sports}
                         onCheckedChange={(checked) =>
-                          setSpecialPeriods({ ...specialPeriods, sports: checked as boolean })
+                          updateBranchConfig(currentBranch, {
+                            specialPeriods: { ...currentConfig.specialPeriods, sports: checked as boolean }
+                          })
                         }
                       />
                       <div className="grid gap-1.5 leading-none">
-                        <label
-                          htmlFor="sports"
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                        >
+                        <label htmlFor={`sports-${currentBranch}`} className="text-sm font-medium">
                           Sports Period
                         </label>
-                        <p className="text-sm text-muted-foreground">
-                          1 period per week for sports activities
-                        </p>
+                        <p className="text-sm text-muted-foreground">1 period per week</p>
                       </div>
                     </div>
 
                     <div className="flex items-start space-x-3">
                       <Checkbox
-                        id="library"
-                        checked={specialPeriods.library}
+                        id={`library-${currentBranch}`}
+                        checked={currentConfig.specialPeriods.library}
                         onCheckedChange={(checked) =>
-                          setSpecialPeriods({ ...specialPeriods, library: checked as boolean })
+                          updateBranchConfig(currentBranch, {
+                            specialPeriods: { ...currentConfig.specialPeriods, library: checked as boolean }
+                          })
                         }
                       />
                       <div className="grid gap-1.5 leading-none">
-                        <label
-                          htmlFor="library"
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                        >
+                        <label htmlFor={`library-${currentBranch}`} className="text-sm font-medium">
                           Library Period
                         </label>
-                        <p className="text-sm text-muted-foreground">
-                          1 period per week for library
-                        </p>
+                        <p className="text-sm text-muted-foreground">1 period per week</p>
                       </div>
                     </div>
 
                     <div className="flex items-start space-x-3">
                       <Checkbox
-                        id="training"
-                        checked={specialPeriods.training}
+                        id={`training-${currentBranch}`}
+                        checked={currentConfig.specialPeriods.training}
                         onCheckedChange={(checked) =>
-                          setSpecialPeriods({ ...specialPeriods, training: checked as boolean })
+                          updateBranchConfig(currentBranch, {
+                            specialPeriods: { ...currentConfig.specialPeriods, training: checked as boolean }
+                          })
                         }
                       />
                       <div className="grid gap-1.5 leading-none">
-                        <label
-                          htmlFor="training"
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                        >
+                        <label htmlFor={`training-${currentBranch}`} className="text-sm font-medium">
                           Training Period
                         </label>
                         <p className="text-sm text-muted-foreground">
-                          Mon-Wed: Morning training (9:00-1:00), Thu-Sat: Afternoon training (1:45-4:30)
+                          Mon-Wed: Morning (9:00-1:00), Thu-Sat: Afternoon (1:45-4:30)
                         </p>
                       </div>
                     </div>
@@ -452,69 +515,68 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
               </div>
 
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setCurrentStep(1)} className="flex-1">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (currentBranchIndex > 0) {
+                      setCurrentBranchIndex(currentBranchIndex - 1);
+                    } else {
+                      setCurrentStep(1);
+                    }
+                  }}
+                  className="flex-1"
+                >
                   Back
                 </Button>
                 <Button onClick={handleStep2Next} className="flex-1">
-                  Next: Select Faculty
+                  {currentBranchIndex < selectedBranches.length - 1 
+                    ? `Next Branch (${selectedBranches[currentBranchIndex + 1]})` 
+                    : "Next: Select Faculty"}
                 </Button>
               </div>
             </form>
           )}
 
-          {/* Step 3: Select Faculty */}
-          {currentStep === 3 && (
+          {/* Step 3: Select Faculty per Branch */}
+          {currentStep === 3 && currentConfig && (
             <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
-              <div className="space-y-4">
-                <div className="p-3 bg-muted rounded-lg">
-                  <p className="text-sm font-medium">
-                    Year: <span className="text-primary">{year}</span> | 
-                    Branch: <span className="text-primary">{branch}</span>
-                    {section && <span className="text-primary"> - {section}</span>}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Only faculty with subjects/labs assigned to this year, branch{section ? ' and section' : ''} will be shown
-                  </p>
-                </div>
-
-                <p className="text-sm text-muted-foreground">
-                  Select faculty for {parseInt(theoryCount)} theory subject(s){parseInt(labCount) > 0 ? ` and ${parseInt(labCount)} lab subject(s)` : ''}
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="text-sm font-medium">
+                  Year: <span className="text-primary">{year}</span> | 
+                  Branch: <span className="text-primary">{currentBranch}</span>
                 </p>
-                
-                {parseInt(theoryCount) > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Only faculty with subjects/labs assigned to this year and branch will be accepted
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                {/* Theory Subjects */}
+                {parseInt(currentConfig.theoryCount) > 0 && (
                   <div className="space-y-3">
                     <h3 className="font-semibold">Theory Subjects</h3>
-                    {filteredTheoryFaculty.length === 0 && (
+                    {getFilteredFacultyForBranch(currentBranch, false).length === 0 && (
                       <p className="text-sm text-amber-600 bg-amber-50 p-2 rounded">
-                        No faculty found with theory subjects for {year} {branch}{section ? `-${section}` : ''}. 
-                        Please add faculty-subject mappings in Faculty-Subject Management.
+                        No faculty found with theory subjects for {year} {currentBranch}.
                       </p>
                     )}
-                    {Array.from({ length: parseInt(theoryCount) }).map((_, index) => {
-                      const selectedName = selectedFaculty[index] || "";
-                      const subjectDetails = selectedName ? getFacultySubjectDetails(selectedName, false) : null;
-                      const hasError = facultyErrors[index];
+                    {Array.from({ length: parseInt(currentConfig.theoryCount) }).map((_, index) => {
+                      const selectedName = currentConfig.selectedFaculty[index] || "";
+                      const subjectDetails = selectedName ? getFacultySubjectDetails(selectedName, currentBranch, false) : null;
+                      const hasError = currentConfig.facultyErrors[index];
                       
                       return (
                         <div key={`theory-${index}`} className="space-y-2">
-                          <Label htmlFor={`theory-faculty-${index}`}>
-                            Theory Subject {index + 1} - Faculty Name *
-                          </Label>
+                          <Label>Theory Subject {index + 1} - Faculty Name *</Label>
                           <Input
-                            id={`theory-faculty-${index}`}
                             placeholder="Enter faculty name"
                             value={selectedName}
-                            onChange={(e) => updateFacultySelection(index, e.target.value)}
-                            onBlur={(e) => {
-                              if (e.target.value.trim() && !isFacultyValidForBranch(e.target.value, false)) {
-                                updateFacultySelection(index, e.target.value);
-                              }
-                            }}
-                            list={`theory-faculty-list-${index}`}
+                            onChange={(e) => updateFacultySelection(currentBranch, index, e.target.value)}
+                            list={`theory-faculty-list-${currentBranch}-${index}`}
                             className={hasError ? "border-destructive" : ""}
                           />
-                          <datalist id={`theory-faculty-list-${index}`}>
-                            {filteredTheoryFaculty.map((mapping) => (
+                          <datalist id={`theory-faculty-list-${currentBranch}-${index}`}>
+                            {getFilteredFacultyForBranch(currentBranch, false).map((mapping) => (
                               <option key={mapping.facultyName} value={mapping.facultyName} />
                             ))}
                           </datalist>
@@ -535,41 +597,33 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
                   </div>
                 )}
 
-                {(parseInt(labCount) || 0) > 0 && (
+                {/* Lab Subjects */}
+                {(parseInt(currentConfig.labCount) || 0) > 0 && (
                   <div className="space-y-3">
                     <h3 className="font-semibold">Lab Subjects</h3>
-                    {filteredLabFaculty.length === 0 && (
+                    {getFilteredFacultyForBranch(currentBranch, true).length === 0 && (
                       <p className="text-sm text-amber-600 bg-amber-50 p-2 rounded">
-                        No faculty found with lab subjects for {year} {branch}{section ? `-${section}` : ''}. 
-                        Please add faculty-lab mappings in Faculty-Subject Management.
+                        No faculty found with lab subjects for {year} {currentBranch}.
                       </p>
                     )}
-                    {Array.from({ length: parseInt(labCount) || 0 }).map((_, index) => {
-                      const actualIndex = parseInt(theoryCount) + index;
-                      const selectedName = selectedFaculty[actualIndex] || "";
-                      const subjectDetails = selectedName ? getFacultySubjectDetails(selectedName, true) : null;
-                      const hasError = facultyErrors[actualIndex];
+                    {Array.from({ length: parseInt(currentConfig.labCount) || 0 }).map((_, index) => {
+                      const actualIndex = parseInt(currentConfig.theoryCount) + index;
+                      const selectedName = currentConfig.selectedFaculty[actualIndex] || "";
+                      const subjectDetails = selectedName ? getFacultySubjectDetails(selectedName, currentBranch, true) : null;
+                      const hasError = currentConfig.facultyErrors[actualIndex];
                       
                       return (
                         <div key={`lab-${index}`} className="space-y-2">
-                          <Label htmlFor={`lab-faculty-${index}`}>
-                            Lab Subject {index + 1} - Faculty Name *
-                          </Label>
+                          <Label>Lab Subject {index + 1} - Faculty Name *</Label>
                           <Input
-                            id={`lab-faculty-${index}`}
                             placeholder="Enter faculty name"
                             value={selectedName}
-                            onChange={(e) => updateFacultySelection(actualIndex, e.target.value)}
-                            onBlur={(e) => {
-                              if (e.target.value.trim() && !isFacultyValidForBranch(e.target.value, true)) {
-                                updateFacultySelection(actualIndex, e.target.value);
-                              }
-                            }}
-                            list={`lab-faculty-list-${index}`}
+                            onChange={(e) => updateFacultySelection(currentBranch, actualIndex, e.target.value)}
+                            list={`lab-faculty-list-${currentBranch}-${index}`}
                             className={hasError ? "border-destructive" : ""}
                           />
-                          <datalist id={`lab-faculty-list-${index}`}>
-                            {filteredLabFaculty.map((mapping) => (
+                          <datalist id={`lab-faculty-list-${currentBranch}-${index}`}>
+                            {getFilteredFacultyForBranch(currentBranch, true).map((mapping) => (
                               <option key={mapping.facultyName} value={mapping.facultyName} />
                             ))}
                           </datalist>
@@ -592,11 +646,24 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
               </div>
 
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setCurrentStep(2)} className="flex-1">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (currentBranchIndex > 0) {
+                      setCurrentBranchIndex(currentBranchIndex - 1);
+                    } else {
+                      setCurrentStep(2);
+                      setCurrentBranchIndex(selectedBranches.length - 1);
+                    }
+                  }}
+                  className="flex-1"
+                >
                   Back
                 </Button>
                 <Button onClick={handleStep3Next} className="flex-1">
-                  Generate Timetable
+                  {currentBranchIndex < selectedBranches.length - 1 
+                    ? `Next Branch (${selectedBranches[currentBranchIndex + 1]})` 
+                    : "Generate Timetables"}
                 </Button>
               </div>
             </form>
