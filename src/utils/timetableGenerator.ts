@@ -108,6 +108,42 @@ export function generateTimetable(
     });
   }
 
+  // Morning half-day training: Mon-Wed 9:00-1:00 (afternoons are normal classes)
+  if (specialPeriods?.morningTraining && !specialPeriods?.training) {
+    TRAINING_SLOTS.morningDays.forEach((day) => {
+      TRAINING_SLOTS.morningPeriods.forEach((period) => {
+        entries.push({
+          day,
+          period,
+          subjectId: "morningTraining",
+          facultyId: "morningTraining",
+          isLab: false,
+          isSpecial: true,
+          specialType: "morningTraining",
+        });
+        blockedSlots.add(`${day}-${period}`);
+      });
+    });
+  }
+
+  // Afternoon half-day training: Thu-Sat 1:45-4:30 (mornings are normal classes)
+  if (specialPeriods?.afternoonTraining && !specialPeriods?.training) {
+    TRAINING_SLOTS.afternoonDays.forEach((day) => {
+      TRAINING_SLOTS.afternoonPeriods.forEach((period) => {
+        entries.push({
+          day,
+          period,
+          subjectId: "afternoonTraining",
+          facultyId: "afternoonTraining",
+          isLab: false,
+          isSpecial: true,
+          specialType: "afternoonTraining",
+        });
+        blockedSlots.add(`${day}-${period}`);
+      });
+    });
+  }
+
   // Allocate sports period (1 period per week)
   if (specialPeriods?.sports) {
     const availableDays = DAYS.filter((day) => {

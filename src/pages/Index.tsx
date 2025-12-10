@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { ConfigForm } from "@/components/ConfigForm";
+import { ConfigForm, ConfigFormState } from "@/components/ConfigForm";
 import { TimetableDisplay } from "@/components/TimetableDisplay";
 import { Navigation } from "@/components/Navigation";
 import { Timetable, TimetableEntry, SavedTimetable } from "@/types/timetable";
@@ -11,8 +11,10 @@ import { Button } from "@/components/ui/button";
 const Index = () => {
   const [timetables, setTimetables] = useState<Timetable[]>([]);
   const [activeTab, setActiveTab] = useState("0");
+  const [configFormState, setConfigFormState] = useState<ConfigFormState | null>(null);
 
   useEffect(() => {
+    // Load current timetables
     const saved = localStorage.getItem("currentTimetables");
     if (saved) {
       try {
@@ -24,12 +26,25 @@ const Index = () => {
         console.error("Error loading timetables:", error);
       }
     }
+
+    // Load config form state
+    const savedState = localStorage.getItem("configFormState");
+    if (savedState) {
+      try {
+        setConfigFormState(JSON.parse(savedState));
+      } catch (error) {
+        console.error("Error loading config form state:", error);
+      }
+    }
   }, []);
 
   const handleConfigComplete = (generatedTimetables: Timetable[]) => {
     setTimetables(generatedTimetables);
     setActiveTab("0");
     localStorage.setItem("currentTimetables", JSON.stringify(generatedTimetables));
+    // Clear config form state after completion
+    localStorage.removeItem("configFormState");
+    setConfigFormState(null);
     toast.success(`Generated ${generatedTimetables.length} timetable(s)!`);
   };
 
@@ -42,7 +57,14 @@ const Index = () => {
 
   const handleReset = () => {
     setTimetables([]);
+    setConfigFormState(null);
     localStorage.removeItem("currentTimetables");
+    localStorage.removeItem("configFormState");
+  };
+
+  const handleConfigStateChange = (state: ConfigFormState) => {
+    setConfigFormState(state);
+    localStorage.setItem("configFormState", JSON.stringify(state));
   };
 
   const handleSaveToAdmin = () => {
@@ -63,7 +85,10 @@ const Index = () => {
       createdAt: new Date().toISOString(),
     }));
 
-    localStorage.setItem("savedTimetables", JSON.stringify([...existing, ...newSaved]));
+    const allTimetables = [...existing, ...newSaved];
+    localStorage.setItem("savedTimetables", JSON.stringify(allTimetables));
+    // Also save to allTimetables for admin portal
+    localStorage.setItem("allTimetables", JSON.stringify(allTimetables));
     toast.success(`${timetables.length} timetable(s) saved to Admin Portal!`);
   };
 
@@ -124,7 +149,11 @@ const Index = () => {
             Create intelligent, conflict-free class schedules automatically
           </p>
         </div>
-        <ConfigForm onComplete={handleConfigComplete} />
+        <ConfigForm 
+          onComplete={handleConfigComplete} 
+          savedState={configFormState}
+          onStateChange={handleConfigStateChange}
+        />
       </div>
     </div>
   );
