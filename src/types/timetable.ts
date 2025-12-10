@@ -11,6 +11,7 @@ export interface Subject {
   code: string;
   isLab: boolean;
   facultyName?: string;
+  facultyNames?: string[]; // For labs with multiple faculty
 }
 
 export interface TimeSlot {
@@ -26,15 +27,18 @@ export interface TimetableEntry {
   period: number;
   subjectId: string;
   facultyId: string;
+  facultyIds?: string[]; // For labs with multiple faculty
   isLab?: boolean;
   isSpecial?: boolean;
-  specialType?: 'sports' | 'library' | 'training';
+  specialType?: 'sports' | 'library' | 'training' | 'morningTraining' | 'afternoonTraining';
 }
 
 export interface SpecialPeriods {
   sports: boolean;
   library: boolean;
   training: boolean;
+  morningTraining?: boolean; // Mon-Wed 9:00-1:00
+  afternoonTraining?: boolean; // Thu-Sat 1:40-4:30
 }
 
 export interface ConfigData {

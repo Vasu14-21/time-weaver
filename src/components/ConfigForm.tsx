@@ -24,11 +24,23 @@ interface BranchConfig {
   theoryCount: string;
   labCount: string;
   selectedFaculty: string[];
+  selectedLabFaculty: string[][]; // For multiple faculty per lab
   facultyErrors: string[];
 }
 
 interface ConfigFormProps {
   onComplete: (timetables: Timetable[]) => void;
+  initialStep?: number;
+  savedState?: ConfigFormState | null;
+  onStateChange?: (state: ConfigFormState) => void;
+}
+
+export interface ConfigFormState {
+  currentStep: number;
+  year: string;
+  selectedBranches: string[];
+  branchConfigs: Record<string, BranchConfig>;
+  currentBranchIndex: number;
 }
 
 const DEFAULT_BRANCHES = [
@@ -37,33 +49,63 @@ const DEFAULT_BRANCHES = [
   "AIML-A", "AIML-B", "AIDS-A", "AIDS-B", "AIDS-C"
 ];
 
-export function ConfigForm({ onComplete }: ConfigFormProps) {
-  const [currentStep, setCurrentStep] = useState(1);
-  const [year, setYear] = useState("");
-  const [selectedBranches, setSelectedBranches] = useState<string[]>([]);
-  const [branchConfigs, setBranchConfigs] = useState<Record<string, BranchConfig>>({});
+export function ConfigForm({ onComplete, initialStep, savedState, onStateChange }: ConfigFormProps) {
+  const [currentStep, setCurrentStep] = useState(savedState?.currentStep || 1);
+  const [year, setYear] = useState(savedState?.year || "");
+  const [selectedBranches, setSelectedBranches] = useState<string[]>(savedState?.selectedBranches || []);
+  const [branchConfigs, setBranchConfigs] = useState<Record<string, BranchConfig>>(savedState?.branchConfigs || {});
   const [facultyMappings, setFacultyMappings] = useState<FacultySubjectMapping[]>([]);
   const [customBranches, setCustomBranches] = useState<string[]>([]);
-  const [currentBranchIndex, setCurrentBranchIndex] = useState(0);
+  const [currentBranchIndex, setCurrentBranchIndex] = useState(savedState?.currentBranchIndex || 0);
+
+  // Save state whenever it changes
+  useEffect(() => {
+    if (onStateChange) {
+      onStateChange({
+        currentStep,
+        year,
+        selectedBranches,
+        branchConfigs,
+        currentBranchIndex,
+      });
+    }
+  }, [currentStep, year, selectedBranches, branchConfigs, currentBranchIndex]);
 
   useEffect(() => {
-    const savedMappings = localStorage.getItem("facultySubjectMappings");
-    if (savedMappings) {
-      try {
-        setFacultyMappings(JSON.parse(savedMappings));
-      } catch (error) {
-        console.error("Error loading faculty mappings:", error);
+    const loadData = () => {
+      const savedMappings = localStorage.getItem("facultySubjectMappings");
+      if (savedMappings) {
+        try {
+          setFacultyMappings(JSON.parse(savedMappings));
+        } catch (error) {
+          console.error("Error loading faculty mappings:", error);
+        }
       }
-    }
 
-    const savedBranches = localStorage.getItem("customBranches");
-    if (savedBranches) {
-      try {
-        setCustomBranches(JSON.parse(savedBranches));
-      } catch (error) {
-        console.error("Error loading custom branches:", error);
+      const savedBranches = localStorage.getItem("customBranches");
+      if (savedBranches) {
+        try {
+          setCustomBranches(JSON.parse(savedBranches));
+        } catch (error) {
+          console.error("Error loading custom branches:", error);
+        }
       }
-    }
+    };
+
+    loadData();
+
+    // Listen for storage changes (when coming back from Faculty Management)
+    const handleStorageChange = () => {
+      loadData();
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("focus", loadData);
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("focus", loadData);
+    };
   }, []);
 
   const allBranches = [...DEFAULT_BRANCHES, ...customBranches];
@@ -80,10 +122,11 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
         ...branchConfigs,
         [branch]: {
           branch,
-          specialPeriods: { sports: false, library: false, training: false },
+          specialPeriods: { sports: false, library: false, training: false, morningTraining: false, afternoonTraining: false },
           theoryCount: "",
           labCount: "",
           selectedFaculty: [],
+          selectedLabFaculty: [],
           facultyErrors: [],
         }
       });
@@ -111,7 +154,6 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
   };
 
   const getBranchName = (branch: string) => {
-    // Extract branch name and section from combined string like "CSE-A"
     const parts = branch.split("-");
     if (parts.length > 1) {
       return { branchName: parts[0], section: parts.slice(1).join("-") };
@@ -133,11 +175,9 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
         
         if (itemYear && itemYear !== year) return false;
         
-        // Match branch - check if itemBranch matches or if full branch string matches
         const fullBranch = branch.toUpperCase();
         if (itemBranch !== branchUpper && itemBranch !== fullBranch) return false;
         
-        // If section is provided in selection, match it
         if (sectionUpper && itemSection && itemSection !== sectionUpper) return false;
         
         return true;
@@ -211,11 +251,11 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
     }
 
     const lab = parseInt(config.labCount) || 0;
-    const totalCount = theory + lab;
     
     updateBranchConfig(currentBranch, {
-      selectedFaculty: new Array(totalCount).fill(""),
-      facultyErrors: new Array(totalCount).fill(""),
+      selectedFaculty: new Array(theory).fill(""),
+      selectedLabFaculty: new Array(lab).fill([]).map(() => [""]),
+      facultyErrors: new Array(theory + lab).fill(""),
     });
 
     if (currentBranchIndex < selectedBranches.length - 1) {
@@ -228,16 +268,13 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
 
   const updateFacultySelection = (branch: string, index: number, facultyName: string) => {
     const config = branchConfigs[branch];
-    const theory = parseInt(config.theoryCount);
-    const isLab = index >= theory;
-    
     const newErrors = [...config.facultyErrors];
     
     if (facultyName.trim()) {
-      const isValid = isFacultyValidForBranch(facultyName, branch, isLab);
+      const isValid = isFacultyValidForBranch(facultyName, branch, false);
       if (!isValid) {
-        newErrors[index] = `"${facultyName}" has no ${isLab ? 'labs' : 'subjects'} for ${year} ${branch}`;
-        toast.error(`Invalid faculty: "${facultyName}" has no ${isLab ? 'labs' : 'subjects'} for ${year} ${branch}`);
+        newErrors[index] = `"${facultyName}" has no subjects for ${year} ${branch}`;
+        toast.error(`Invalid faculty: "${facultyName}" has no subjects for ${year} ${branch}`);
         const updated = [...config.selectedFaculty];
         updated[index] = "";
         updateBranchConfig(branch, { selectedFaculty: updated, facultyErrors: newErrors });
@@ -254,14 +291,66 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
     updateBranchConfig(branch, { selectedFaculty: updated, facultyErrors: newErrors });
   };
 
+  const updateLabFacultySelection = (branch: string, labIndex: number, facultyIndex: number, facultyName: string) => {
+    const config = branchConfigs[branch];
+    const theory = parseInt(config.theoryCount);
+    const errorIndex = theory + labIndex;
+    const newErrors = [...config.facultyErrors];
+    
+    if (facultyName.trim()) {
+      const isValid = isFacultyValidForBranch(facultyName, branch, true);
+      if (!isValid) {
+        newErrors[errorIndex] = `"${facultyName}" has no labs for ${year} ${branch}`;
+        toast.error(`Invalid faculty: "${facultyName}" has no labs for ${year} ${branch}`);
+        const updated = [...config.selectedLabFaculty];
+        updated[labIndex][facultyIndex] = "";
+        updateBranchConfig(branch, { selectedLabFaculty: updated, facultyErrors: newErrors });
+        return;
+      } else {
+        newErrors[errorIndex] = "";
+      }
+    } else {
+      newErrors[errorIndex] = "";
+    }
+    
+    const updated = [...config.selectedLabFaculty];
+    updated[labIndex][facultyIndex] = facultyName;
+    updateBranchConfig(branch, { selectedLabFaculty: updated, facultyErrors: newErrors });
+  };
+
+  const addLabFaculty = (branch: string, labIndex: number) => {
+    const config = branchConfigs[branch];
+    const updated = [...config.selectedLabFaculty];
+    updated[labIndex] = [...updated[labIndex], ""];
+    updateBranchConfig(branch, { selectedLabFaculty: updated });
+  };
+
+  const removeLabFaculty = (branch: string, labIndex: number, facultyIndex: number) => {
+    const config = branchConfigs[branch];
+    if (config.selectedLabFaculty[labIndex].length <= 1) return;
+    const updated = [...config.selectedLabFaculty];
+    updated[labIndex] = updated[labIndex].filter((_, i) => i !== facultyIndex);
+    updateBranchConfig(branch, { selectedLabFaculty: updated });
+  };
+
   const handleStep3Next = () => {
     const currentBranch = selectedBranches[currentBranchIndex];
     const config = branchConfigs[currentBranch];
     
-    const emptyCount = config.selectedFaculty.filter(f => !f.trim()).length;
-    if (emptyCount > 0) {
-      toast.error(`Please select all ${config.selectedFaculty.length} faculty members for ${currentBranch}`);
+    // Check theory faculty
+    const emptyTheory = config.selectedFaculty.filter(f => !f.trim()).length;
+    if (emptyTheory > 0) {
+      toast.error(`Please select all ${config.selectedFaculty.length} theory faculty members for ${currentBranch}`);
       return;
+    }
+    
+    // Check lab faculty (at least one per lab)
+    for (let i = 0; i < config.selectedLabFaculty.length; i++) {
+      const hasValidFaculty = config.selectedLabFaculty[i].some(f => f.trim());
+      if (!hasValidFaculty) {
+        toast.error(`Please select at least one faculty for Lab ${i + 1} in ${currentBranch}`);
+        return;
+      }
     }
     
     const hasErrors = config.facultyErrors.some(e => e);
@@ -290,44 +379,56 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
       const labsList: Subject[] = [];
       const facultyList: Faculty[] = [];
 
+      // Add theory subjects
       config.selectedFaculty.forEach((facultyName, index) => {
-        const isLab = index >= theory;
-        const subjectDetails = getFacultySubjectDetails(facultyName, branch, isLab);
+        const subjectDetails = getFacultySubjectDetails(facultyName, branch, false);
         
-        let subjectCode = "";
-        let subjectName = "";
-        
-        if (subjectDetails) {
-          subjectCode = subjectDetails.code;
-          subjectName = subjectDetails.name;
-        } else {
-          if (isLab) {
-            subjectCode = `LAB${index - theory + 1}`;
-            subjectName = `${facultyName} Lab`;
-          } else {
-            subjectCode = `SUB${index + 1}`;
-            subjectName = `${facultyName} Subject`;
-          }
-        }
+        let subjectCode = subjectDetails?.code || `SUB${index + 1}`;
+        let subjectName = subjectDetails?.name || `${facultyName} Subject`;
 
         const subjectItem: Subject = {
-          id: `${isLab ? 'lab' : 'subject'}-${Date.now()}-${index}-${branch}`,
+          id: `subject-${Date.now()}-${index}-${branch}`,
           name: subjectName,
           code: subjectCode,
-          isLab,
+          isLab: false,
         };
 
-        if (isLab) {
-          labsList.push(subjectItem);
-        } else {
-          subjectsList.push(subjectItem);
-        }
+        subjectsList.push(subjectItem);
 
         facultyList.push({
           id: `faculty-${index + 1}-${branch}`,
           name: facultyName,
           subjectId: subjectItem.id,
           subjectCode,
+        });
+      });
+
+      // Add lab subjects with multiple faculty support
+      config.selectedLabFaculty.forEach((facultyNames, labIndex) => {
+        const validFacultyNames = facultyNames.filter(f => f.trim());
+        const firstFaculty = validFacultyNames[0];
+        const subjectDetails = getFacultySubjectDetails(firstFaculty, branch, true);
+        
+        let labCode = subjectDetails?.code || `LAB${labIndex + 1}`;
+        let labName = subjectDetails?.name || `Lab ${labIndex + 1}`;
+
+        const labItem: Subject = {
+          id: `lab-${Date.now()}-${labIndex}-${branch}`,
+          name: labName,
+          code: labCode,
+          isLab: true,
+          facultyNames: validFacultyNames,
+        };
+
+        labsList.push(labItem);
+
+        validFacultyNames.forEach((facultyName, fIndex) => {
+          facultyList.push({
+            id: `faculty-lab-${labIndex}-${fIndex}-${branch}`,
+            name: facultyName,
+            subjectId: labItem.id,
+            subjectCode: labCode,
+          });
         });
       });
 
@@ -503,10 +604,50 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
                       />
                       <div className="grid gap-1.5 leading-none">
                         <label htmlFor={`training-${currentBranch}`} className="text-sm font-medium">
-                          Training Period
+                          Full Training Period
                         </label>
                         <p className="text-sm text-muted-foreground">
                           Mon-Wed: Morning (9:00-1:00), Thu-Sat: Afternoon (1:45-4:30)
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start space-x-3">
+                      <Checkbox
+                        id={`morningTraining-${currentBranch}`}
+                        checked={currentConfig.specialPeriods.morningTraining}
+                        onCheckedChange={(checked) =>
+                          updateBranchConfig(currentBranch, {
+                            specialPeriods: { ...currentConfig.specialPeriods, morningTraining: checked as boolean }
+                          })
+                        }
+                      />
+                      <div className="grid gap-1.5 leading-none">
+                        <label htmlFor={`morningTraining-${currentBranch}`} className="text-sm font-medium">
+                          Morning Half-Day Training
+                        </label>
+                        <p className="text-sm text-muted-foreground">
+                          Mon-Wed: 9:00 to 1:00 (Afternoon normal classes)
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start space-x-3">
+                      <Checkbox
+                        id={`afternoonTraining-${currentBranch}`}
+                        checked={currentConfig.specialPeriods.afternoonTraining}
+                        onCheckedChange={(checked) =>
+                          updateBranchConfig(currentBranch, {
+                            specialPeriods: { ...currentConfig.specialPeriods, afternoonTraining: checked as boolean }
+                          })
+                        }
+                      />
+                      <div className="grid gap-1.5 leading-none">
+                        <label htmlFor={`afternoonTraining-${currentBranch}`} className="text-sm font-medium">
+                          Afternoon Half-Day Training
+                        </label>
+                        <p className="text-sm text-muted-foreground">
+                          Thu-Sat: 1:45 to 4:30 (Morning normal classes)
                         </p>
                       </div>
                     </div>
@@ -597,46 +738,77 @@ export function ConfigForm({ onComplete }: ConfigFormProps) {
                   </div>
                 )}
 
-                {/* Lab Subjects */}
+                {/* Lab Subjects with Multiple Faculty Support */}
                 {(parseInt(currentConfig.labCount) || 0) > 0 && (
                   <div className="space-y-3">
                     <h3 className="font-semibold">Lab Subjects</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Labs can have multiple faculty members. Click "Add Faculty" to add more.
+                    </p>
                     {getFilteredFacultyForBranch(currentBranch, true).length === 0 && (
                       <p className="text-sm text-amber-600 bg-amber-50 p-2 rounded">
                         No faculty found with lab subjects for {year} {currentBranch}.
                       </p>
                     )}
-                    {Array.from({ length: parseInt(currentConfig.labCount) || 0 }).map((_, index) => {
-                      const actualIndex = parseInt(currentConfig.theoryCount) + index;
-                      const selectedName = currentConfig.selectedFaculty[actualIndex] || "";
-                      const subjectDetails = selectedName ? getFacultySubjectDetails(selectedName, currentBranch, true) : null;
-                      const hasError = currentConfig.facultyErrors[actualIndex];
+                    {Array.from({ length: parseInt(currentConfig.labCount) || 0 }).map((_, labIndex) => {
+                      const theory = parseInt(currentConfig.theoryCount);
+                      const hasError = currentConfig.facultyErrors[theory + labIndex];
+                      const labFaculty = currentConfig.selectedLabFaculty[labIndex] || [""];
+                      const firstFacultyDetails = labFaculty[0] ? getFacultySubjectDetails(labFaculty[0], currentBranch, true) : null;
                       
                       return (
-                        <div key={`lab-${index}`} className="space-y-2">
-                          <Label>Lab Subject {index + 1} - Faculty Name *</Label>
-                          <Input
-                            placeholder="Enter faculty name"
-                            value={selectedName}
-                            onChange={(e) => updateFacultySelection(currentBranch, actualIndex, e.target.value)}
-                            list={`lab-faculty-list-${currentBranch}-${index}`}
-                            className={hasError ? "border-destructive" : ""}
-                          />
-                          <datalist id={`lab-faculty-list-${currentBranch}-${index}`}>
-                            {getFilteredFacultyForBranch(currentBranch, true).map((mapping) => (
-                              <option key={mapping.facultyName} value={mapping.facultyName} />
-                            ))}
-                          </datalist>
+                        <div key={`lab-${labIndex}`} className="space-y-2 p-3 border rounded-lg">
+                          <div className="flex justify-between items-center">
+                            <Label className="font-semibold">Lab Subject {labIndex + 1}</Label>
+                            {firstFacultyDetails && (
+                              <Badge variant="outline" className="text-xs">
+                                {firstFacultyDetails.code} - {firstFacultyDetails.name}
+                              </Badge>
+                            )}
+                          </div>
+                          
+                          {labFaculty.map((facultyName, fIndex) => (
+                            <div key={`lab-${labIndex}-faculty-${fIndex}`} className="flex gap-2 items-center">
+                              <Input
+                                placeholder={`Faculty ${fIndex + 1} name`}
+                                value={facultyName}
+                                onChange={(e) => updateLabFacultySelection(currentBranch, labIndex, fIndex, e.target.value)}
+                                list={`lab-faculty-list-${currentBranch}-${labIndex}-${fIndex}`}
+                                className={hasError ? "border-destructive" : ""}
+                              />
+                              <datalist id={`lab-faculty-list-${currentBranch}-${labIndex}-${fIndex}`}>
+                                {getFilteredFacultyForBranch(currentBranch, true).map((mapping) => (
+                                  <option key={mapping.facultyName} value={mapping.facultyName} />
+                                ))}
+                              </datalist>
+                              {labFaculty.length > 1 && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => removeLabFaculty(currentBranch, labIndex, fIndex)}
+                                  className="text-destructive shrink-0"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                          
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => addLabFaculty(currentBranch, labIndex)}
+                          >
+                            + Add Faculty
+                          </Button>
+                          
                           {hasError && (
                             <p className="text-xs text-destructive flex items-center gap-1">
                               <AlertCircle className="h-3 w-3" />
                               {hasError}
                             </p>
-                          )}
-                          {subjectDetails && !hasError && (
-                            <Badge variant="outline" className="text-xs">
-                              {subjectDetails.code} - {subjectDetails.name}
-                            </Badge>
                           )}
                         </div>
                       );

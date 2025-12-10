@@ -10,6 +10,7 @@ export interface FacultyConflict {
     year: string;
     branch: string;
     subjectName: string;
+    facultyName: string;
   }[];
 }
 
@@ -33,13 +34,16 @@ export function detectFacultyConflicts(
   // Build the faculty assignment map from existing timetables
   existingTimetables.forEach((tt) => {
     tt.entries.forEach((entry) => {
+      // Skip special periods
+      if (entry.isSpecial) return;
+
       const faculty = tt.config.faculty.find((f) => f.id === entry.facultyId);
       const subject = [...tt.config.subjects, ...tt.config.labs].find(
         (s) => s.id === entry.subjectId
       );
 
       if (faculty && subject) {
-        const key = `${faculty.name}-${entry.day}-${entry.period}`;
+        const key = `${faculty.name.toLowerCase()}-${entry.day}-${entry.period}`;
         if (!facultyAssignments.has(key)) {
           facultyAssignments.set(key, []);
         }
@@ -53,18 +57,47 @@ export function detectFacultyConflicts(
           subjectName: subject.name,
         });
       }
+
+      // Also check for facultyIds array (labs with multiple faculty)
+      if (entry.facultyIds) {
+        entry.facultyIds.forEach((fId) => {
+          const fac = tt.config.faculty.find((f) => f.id === fId);
+          if (fac && subject) {
+            const key = `${fac.name.toLowerCase()}-${entry.day}-${entry.period}`;
+            if (!facultyAssignments.has(key)) {
+              facultyAssignments.set(key, []);
+            }
+            // Avoid duplicates
+            const existing = facultyAssignments.get(key)!;
+            if (!existing.find(e => e.timetableId === tt.id && e.subjectName === subject.name)) {
+              existing.push({
+                day: entry.day,
+                period: entry.period,
+                timetableId: tt.id,
+                year: tt.config.year,
+                branch: tt.config.branch,
+                facultyName: fac.name,
+                subjectName: subject.name,
+              });
+            }
+          }
+        });
+      }
     });
   });
 
   // Check new timetable entries against existing assignments
   newTimetable.entries.forEach((entry) => {
+    // Skip special periods
+    if (entry.isSpecial) return;
+
     const faculty = newTimetable.config.faculty.find((f) => f.id === entry.facultyId);
     const subject = [...newTimetable.config.subjects, ...newTimetable.config.labs].find(
       (s) => s.id === entry.subjectId
     );
 
-    if (faculty && subject) {
-      const key = `${faculty.name}-${entry.day}-${entry.period}`;
+    const checkFacultyConflict = (facultyName: string, subjectName: string) => {
+      const key = `${facultyName.toLowerCase()}-${entry.day}-${entry.period}`;
       const existing = facultyAssignments.get(key);
 
       if (existing && existing.length > 0) {
@@ -74,7 +107,7 @@ export function detectFacultyConflicts(
         // Check if conflict already exists in the list
         const existingConflict = conflicts.find(
           (c) =>
-            c.facultyName === faculty.name &&
+            c.facultyName.toLowerCase() === facultyName.toLowerCase() &&
             c.day === entry.day &&
             c.period === entry.period
         );
@@ -85,12 +118,13 @@ export function detectFacultyConflicts(
             id: newTimetable.id,
             year: newTimetable.config.year,
             branch: newTimetable.config.branch,
-            subjectName: subject.name,
+            subjectName: subjectName,
+            facultyName: facultyName,
           });
         } else {
           // Create new conflict entry
           conflicts.push({
-            facultyName: faculty.name,
+            facultyName: facultyName,
             day: entry.day,
             period: entry.period,
             timeSlot,
@@ -100,17 +134,33 @@ export function detectFacultyConflicts(
                 year: e.year,
                 branch: e.branch,
                 subjectName: e.subjectName,
+                facultyName: e.facultyName,
               })),
               {
                 id: newTimetable.id,
                 year: newTimetable.config.year,
                 branch: newTimetable.config.branch,
-                subjectName: subject.name,
+                subjectName: subjectName,
+                facultyName: facultyName,
               },
             ],
           });
         }
       }
+    };
+
+    if (faculty && subject) {
+      checkFacultyConflict(faculty.name, subject.name);
+    }
+
+    // Also check for facultyIds array (labs with multiple faculty)
+    if (entry.facultyIds && subject) {
+      entry.facultyIds.forEach((fId) => {
+        const fac = newTimetable.config.faculty.find((f) => f.id === fId);
+        if (fac) {
+          checkFacultyConflict(fac.name, subject.name);
+        }
+      });
     }
   });
 
