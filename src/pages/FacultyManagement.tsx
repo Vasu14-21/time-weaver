@@ -478,12 +478,12 @@ const FacultyManagement = () => {
             <CardContent>
               {/* Search Dropdown */}
               <div className="mb-4">
-                <Select value={searchBranch} onValueChange={setSearchBranch}>
+                <Select value={searchBranch || "all"} onValueChange={(val) => setSearchBranch(val === "all" ? "" : val)}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select branch to filter..." />
                   </SelectTrigger>
                   <SelectContent className="bg-popover max-h-[300px]">
-                    <SelectItem value="">All Branches</SelectItem>
+                    <SelectItem value="all">All Branches</SelectItem>
                     {allBranches.map((b) => (
                       <SelectItem key={b} value={b}>{b}</SelectItem>
                     ))}
