@@ -67,29 +67,46 @@ const Index = () => {
     localStorage.setItem("configFormState", JSON.stringify(state));
   };
 
-  const handleSaveToAdmin = () => {
-    const savedTimetables = localStorage.getItem("savedTimetables");
+  const checkExistingInAdmin = (year: string, branch: string): boolean => {
+    const saved = localStorage.getItem("allTimetables");
+    if (!saved) return false;
+    try {
+      const existing: SavedTimetable[] = JSON.parse(saved);
+      return existing.some(tt => tt.config.year === year && tt.config.branch === branch);
+    } catch {
+      return false;
+    }
+  };
+
+  const handleSaveIndividualToAdmin = (index: number) => {
+    const tt = timetables[index];
+    
+    // Check if this year+branch already exists in admin
+    if (checkExistingInAdmin(tt.config.year, tt.config.branch)) {
+      toast.error(`Timetable for ${tt.config.year} - ${tt.config.branch} already exists in Admin Portal. Delete it first to create a new one.`);
+      return;
+    }
+
+    const saved = localStorage.getItem("allTimetables");
     let existing: SavedTimetable[] = [];
     
-    if (savedTimetables) {
+    if (saved) {
       try {
-        existing = JSON.parse(savedTimetables);
+        existing = JSON.parse(saved);
       } catch (error) {
         console.error("Error parsing saved timetables:", error);
       }
     }
 
-    const newSaved: SavedTimetable[] = timetables.map(tt => ({
+    const newSaved: SavedTimetable = {
       ...tt,
       id: `timetable-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       createdAt: new Date().toISOString(),
-    }));
+    };
 
-    const allTimetables = [...existing, ...newSaved];
-    localStorage.setItem("savedTimetables", JSON.stringify(allTimetables));
-    // Also save to allTimetables for admin portal
+    const allTimetables = [...existing, newSaved];
     localStorage.setItem("allTimetables", JSON.stringify(allTimetables));
-    toast.success(`${timetables.length} timetable(s) saved to Admin Portal!`);
+    toast.success(`${tt.config.year} - ${tt.config.branch} saved to Admin Portal!`);
   };
 
   if (timetables.length > 0) {
@@ -99,18 +116,22 @@ const Index = () => {
         <div className="container mx-auto py-8">
           <div className="flex justify-between items-center mb-6 print:hidden">
             <h2 className="text-2xl font-bold">Generated Timetables ({timetables.length})</h2>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={handleReset}>Create New</Button>
-              <Button onClick={handleSaveToAdmin}>Save All to Admin Portal</Button>
-            </div>
+            <Button variant="outline" onClick={handleReset}>New Timetable</Button>
           </div>
 
           {timetables.length === 1 ? (
-            <TimetableDisplay
-              config={timetables[0].config}
-              entries={timetables[0].entries}
-              onUpdateEntries={(entries) => handleUpdateEntries(0, entries)}
-            />
+            <>
+              <div className="flex justify-end mb-4 print:hidden">
+                <Button onClick={() => handleSaveIndividualToAdmin(0)}>
+                  Save to Admin Portal
+                </Button>
+              </div>
+              <TimetableDisplay
+                config={timetables[0].config}
+                entries={timetables[0].entries}
+                onUpdateEntries={(entries) => handleUpdateEntries(0, entries)}
+              />
+            </>
           ) : (
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList className="mb-4 flex-wrap h-auto">
@@ -122,6 +143,11 @@ const Index = () => {
               </TabsList>
               {timetables.map((tt, i) => (
                 <TabsContent key={i} value={i.toString()}>
+                  <div className="flex justify-end mb-4 print:hidden">
+                    <Button onClick={() => handleSaveIndividualToAdmin(i)}>
+                      Save {tt.config.branch} to Admin Portal
+                    </Button>
+                  </div>
                   <TimetableDisplay
                     config={tt.config}
                     entries={tt.entries}

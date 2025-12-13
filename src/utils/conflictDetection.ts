@@ -21,6 +21,7 @@ export function detectFacultyConflicts(
   const conflicts: FacultyConflict[] = [];
 
   // Create a map of faculty assignments across all existing timetables
+  // Key: "facultyname-day-period" (faculty name is case-insensitive)
   const facultyAssignments: Map<string, {
     day: string;
     period: number;
@@ -30,6 +31,9 @@ export function detectFacultyConflicts(
     facultyName: string;
     subjectName: string;
   }[]> = new Map();
+
+  // Helper function to normalize faculty name for comparison
+  const normalizeFacultyName = (name: string) => name.toLowerCase().trim();
 
   // Build the faculty assignment map from existing timetables
   existingTimetables.forEach((tt) => {
@@ -43,7 +47,7 @@ export function detectFacultyConflicts(
       );
 
       if (faculty && subject) {
-        const key = `${faculty.name.toLowerCase()}-${entry.day}-${entry.period}`;
+        const key = `${normalizeFacultyName(faculty.name)}-${entry.day}-${entry.period}`;
         if (!facultyAssignments.has(key)) {
           facultyAssignments.set(key, []);
         }
@@ -63,7 +67,7 @@ export function detectFacultyConflicts(
         entry.facultyIds.forEach((fId) => {
           const fac = tt.config.faculty.find((f) => f.id === fId);
           if (fac && subject) {
-            const key = `${fac.name.toLowerCase()}-${entry.day}-${entry.period}`;
+            const key = `${normalizeFacultyName(fac.name)}-${entry.day}-${entry.period}`;
             if (!facultyAssignments.has(key)) {
               facultyAssignments.set(key, []);
             }
@@ -97,7 +101,7 @@ export function detectFacultyConflicts(
     );
 
     const checkFacultyConflict = (facultyName: string, subjectName: string) => {
-      const key = `${facultyName.toLowerCase()}-${entry.day}-${entry.period}`;
+      const key = `${normalizeFacultyName(facultyName)}-${entry.day}-${entry.period}`;
       const existing = facultyAssignments.get(key);
 
       if (existing && existing.length > 0) {
@@ -107,20 +111,25 @@ export function detectFacultyConflicts(
         // Check if conflict already exists in the list
         const existingConflict = conflicts.find(
           (c) =>
-            c.facultyName.toLowerCase() === facultyName.toLowerCase() &&
+            normalizeFacultyName(c.facultyName) === normalizeFacultyName(facultyName) &&
             c.day === entry.day &&
             c.period === entry.period
         );
 
         if (existingConflict) {
-          // Add to existing conflict
-          existingConflict.conflictingTimetables.push({
-            id: newTimetable.id,
-            year: newTimetable.config.year,
-            branch: newTimetable.config.branch,
-            subjectName: subjectName,
-            facultyName: facultyName,
-          });
+          // Add to existing conflict if not already there
+          const alreadyHasNewTimetable = existingConflict.conflictingTimetables.some(
+            ct => ct.id === newTimetable.id && ct.subjectName === subjectName
+          );
+          if (!alreadyHasNewTimetable) {
+            existingConflict.conflictingTimetables.push({
+              id: newTimetable.id,
+              year: newTimetable.config.year,
+              branch: newTimetable.config.branch,
+              subjectName: subjectName,
+              facultyName: facultyName,
+            });
+          }
         } else {
           // Create new conflict entry
           conflicts.push({
